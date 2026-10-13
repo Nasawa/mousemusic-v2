@@ -1,0 +1,47 @@
+{
+  "schema": 1,
+  "note": "GM program numbers are 0-based (GM #1 Acoustic Grand Piano = 0). Rows are listed top of screen to bottom. Keys match ARCHITECTURE.md §4/§5. See docs/curation.md for the reasons.",
+  "default_scale": "pentatonic_major",
+  "default_instrument_set": "classic",
+  "scales": [
+    {"id": "pentatonic_major", "label": "Pentatonic major", "intervals": [0, 2, 4, 7, 9], "reason": "No semitone clashes, so any sweep sounds pleasant. Default."},
+    {"id": "pentatonic_minor", "label": "Pentatonic minor", "intervals": [0, 3, 5, 7, 10], "reason": "Same no-clash safety with a darker, bluesy mood."},
+    {"id": "major", "label": "Major", "intervals": [0, 2, 4, 5, 7, 9, 11], "reason": "Familiar do-re-mi. More notes per screen, so finer pitch steps."},
+    {"id": "minor", "label": "Minor", "intervals": [0, 2, 3, 5, 7, 8, 10], "reason": "Natural minor for a sadder colour, still easy on the ear."},
+    {"id": "blues", "label": "Blues", "intervals": [0, 3, 5, 6, 7, 10], "reason": "Minor pentatonic plus the blue note. Characterful, rarely harsh."},
+    {"id": "chromatic", "label": "Chromatic", "intervals": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11], "reason": "Every semitone. Most precise for learning position, but clashes a lot."}
+  ],
+  "instrument_sets": [
+    {"id": "classic", "label": "Classic", "programs": [
+      {"program": 0,   "name": "Acoustic Grand Piano",    "reason": "Instant attack, natural decay. The reference sound."},
+      {"program": 4,   "name": "Electric Piano 1",        "reason": "Soft bell-like attack. Clearly different from the grand."},
+      {"program": 11,  "name": "Vibraphone",              "reason": "Bright mallet onset that cuts through fast sweeps."},
+      {"program": 12,  "name": "Marimba",                 "reason": "Short woody decay, so rapid notes never smear."},
+      {"program": 24,  "name": "Acoustic Guitar (nylon)", "reason": "Plucked, warm, with a distinct timbre for its row."},
+      {"program": 45,  "name": "Pizzicato Strings",       "reason": "String colour without the GS synth's slow bowed attack."},
+      {"program": 46,  "name": "Orchestral Harp",         "reason": "Clean pluck that rings nicely in legato mode."},
+      {"program": 105, "name": "Banjo",                   "reason": "Bright twang. The bottom row is unmistakable."}
+    ]},
+    {"id": "mellow", "label": "Mellow", "programs": [
+      {"program": 4,   "name": "Electric Piano 1",  "reason": "Gentle Rhodes-style tone, quick to speak."},
+      {"program": 11,  "name": "Vibraphone",        "reason": "Soft shimmer at low volume."},
+      {"program": 10,  "name": "Music Box",         "reason": "Delicate and high. Pleasant even when busy."},
+      {"program": 108, "name": "Kalimba",           "reason": "Round thumb-piano pluck with a short tail."},
+      {"program": 46,  "name": "Orchestral Harp",   "reason": "Calm pluck with a long natural ring."},
+      {"program": 88,  "name": "Pad 1 (new age)",   "reason": "The only pad kept: it has a bell attack, so it still tracks the cursor."}
+    ]},
+    {"id": "percussive", "label": "Percussive", "programs": [
+      {"program": 8,   "name": "Celesta",       "reason": "Sparkly, very short, ideal for fast motion."},
+      {"program": 9,   "name": "Glockenspiel",  "reason": "Piercing onset, easy to localise by ear."},
+      {"program": 12,  "name": "Marimba",       "reason": "Woody mid-range anchor."},
+      {"program": 13,  "name": "Xylophone",     "reason": "Drier and brighter than marimba, so it's distinct."},
+      {"program": 14,  "name": "Tubular Bells", "reason": "Big bell row. Rings long, so it works best slowly."},
+      {"program": 108, "name": "Kalimba",       "reason": "Soft pluck that contrasts with the hard mallets."},
+      {"program": 114, "name": "Steel Drums",   "reason": "Bright, unique colour for the bottom row."}
+    ]},
+    {"id": "single_piano", "label": "Piano only", "programs": [
+      {"program": 0, "name": "Acoustic Grand Piano", "reason": "One row, so only pitch is heard. Best for learning X first."}
+    ]},
+    {"id": "full_gm", "label": "All 128 GM", "programs": "0..127", "reason": "v1 behaviour, kept for completeness. Many slow or noisy programs."}
+  ]
+}

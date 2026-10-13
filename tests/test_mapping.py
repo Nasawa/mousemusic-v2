@@ -23,12 +23,16 @@ DUAL_NEG = Rect(-1920, -200, 3840, 1280)
 
 
 def default_grid():
+    # Programs come from data/curation.json (or the built-in fallback); never hardcode them here.
     return build_grid("pentatonic_major", "C", 36, 96, "classic")
+
+
+LAST = Cell(25, len(INSTRUMENT_SETS["classic"].programs) - 1)
 
 
 def test_build_grid_defaults():
     g = default_grid()
-    assert g.cols == 26 and g.rows == 8
+    assert g.cols == 26 and g.programs == INSTRUMENT_SETS["classic"].programs
 
 
 def test_normalize_basic_and_clamped():
@@ -51,14 +55,15 @@ def test_corners_map_to_corner_cells():
     g = default_grid()
     for rect in (FHD, DUAL_NEG):
         assert cell_at(rect.x, rect.y, rect, g) == Cell(0, 0)
-        assert cell_at(rect.x + rect.w - 1, rect.y + rect.h - 1, rect, g) == Cell(25, 7)
-        assert cell_at(rect.x + rect.w + 99, rect.y + rect.h + 99, rect, g) == Cell(25, 7)
+        assert cell_at(rect.x + rect.w - 1, rect.y + rect.h - 1, rect, g) == LAST
+        assert cell_at(rect.x + rect.w + 99, rect.y + rect.h + 99, rect, g) == LAST
 
 
 def test_top_row_is_index_0_and_notes_left_to_right():
     g = default_grid()
-    assert map_position(0, 0, FHD, g) == (36, 0)
-    assert map_position(1919, 1079, FHD, g) == (96, 71)
+    assert map_position(0, 0, FHD, g)[0] == 36
+    assert map_position(0, 0, FHD, g)[1] == g.programs[0]
+    assert map_position(1919, 1079, FHD, g) == (96, g.programs[-1])
 
 
 def test_columns_evenly_sized():
@@ -198,4 +203,4 @@ def test_hysteresis_jump_across_many_cells():
     g = default_grid()
     h = HysteresisMapper(g, FHD)
     h.update(0, 0)
-    assert h.update(1919, 1079) == Cell(25, 7)
+    assert h.update(1919, 1079) == LAST
