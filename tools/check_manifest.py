@@ -5,13 +5,15 @@ python tools/check_manifest.py dist/MouseMusic.exe
 
 from __future__ import annotations
 
+import re
 import sys
 
 REQUIRED = ("<dpiAwareness", "PerMonitorV2", "<dpiAware", "true/pm")
 
 
 def missing(manifest: str) -> list[str]:
-    return [r for r in REQUIRED if r not in manifest]
+    body = re.sub(r"<!--.*?-->", "", manifest, flags=re.S)  # comments don't count
+    return [r for r in REQUIRED if r not in body]
 
 
 def main(argv: list[str]) -> int:

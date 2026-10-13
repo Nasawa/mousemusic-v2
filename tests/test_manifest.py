@@ -25,3 +25,9 @@ def test_missing_detects_absent_entries():
 
 def test_spec_references_manifest():
     assert "manifest=str(MANIFEST)" in (ROOT / "mousemusic.spec").read_text(encoding="utf-8")
+
+
+def test_comment_mentions_do_not_count():
+    assert check.missing("<!-- <dpiAwareness PerMonitorV2 <dpiAware true/pm -->") == list(
+        check.REQUIRED
+    )
