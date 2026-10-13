@@ -305,7 +305,7 @@ class LoadResult:
 def load_report(path: Path) -> LoadResult:
     """Load settings, never raising. See module docstring for the robustness rules."""
     try:
-        text = path.read_text(encoding="utf-8")
+        text = path.read_text(encoding="utf-8-sig")  # tolerate a BOM (Notepad); write plain utf-8
     except FileNotFoundError:
         return LoadResult(DEFAULTS)
     except (OSError, UnicodeDecodeError) as exc:

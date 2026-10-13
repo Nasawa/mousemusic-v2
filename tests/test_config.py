@@ -481,3 +481,13 @@ def test_saver_on_error_called(tmp_path):
     saver.request(DEFAULTS)
     saver.flush()
     assert calls == [1]
+
+
+def test_bom_prefixed_file_is_not_corrupt(tmp_path):
+    path = tmp_path / "settings.json"
+    path.write_bytes(b"\xef\xbb\xbf" + b'{"schema": 1, "volume": 33}')
+    r = config.load_report(path)
+    assert not r.corrupt and r.settings.volume == 33
+    assert not (tmp_path / "settings.json.bak").exists()
+    config.save(r.settings, path)
+    assert not path.read_bytes().startswith(b"\xef\xbb\xbf")  # written back as plain utf-8

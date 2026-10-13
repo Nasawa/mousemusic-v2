@@ -107,6 +107,9 @@ jobs:
           if (-not $ver.Contains("mousemusic ")) { throw "missing --version output: '$ver'" }
           Write-Host "MouseMusic.exe --self-test OK (output visible)"
 
+      - name: Verify embedded manifest declares DPI awareness
+        run: python tools/check_manifest.py dist/MouseMusic.exe
+
       - uses: actions/upload-artifact@v7
         with:
           name: MouseMusic-${{ github.sha }}-win64
