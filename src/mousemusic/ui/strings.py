@@ -94,7 +94,7 @@ BALLOON_FIRST_CLOSE_PLAYING = (
     "Press {hotkey} to stop, or right-click the icon to quit."
 )
 BALLOON_LOST_TITLE = "MouseMusic stopped"
-BALLOON_LOST = "Lost connection to {device}. Click to open MouseMusic."
+BALLOON_LOST = "Lost connection to {device}. Open MouseMusic from the tray icon."
 
 # Device combobox placeholder when the list is empty
 NO_DEVICE_COMBO = "No MIDI output found"

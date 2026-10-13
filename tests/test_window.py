@@ -7,6 +7,7 @@ import pytest
 
 from mousemusic.config import DEFAULTS
 from mousemusic.engine import Event
+from mousemusic.mapping import Rect
 from mousemusic.midi import NoDevicesError
 from mousemusic.ui import strings
 from mousemusic.ui.controller import AppController
@@ -202,11 +203,11 @@ def test_polling_loop_runs_and_cancels(root):
 
 def test_window_position_restore_and_offscreen(root):
     s = DEFAULTS.replace(window_x=10, window_y=20)
-    w, *_ = build(root, settings=s, on_screen=lambda x, y: True)
+    w, *_ = build(root, settings=s, monitors=lambda: [Rect(0, 0, 1920, 1080)])
     assert w.placed == (10, 20)
     r2 = tk.Tk()
     try:
-        w2, *_ = build(r2, settings=s, on_screen=lambda x, y: False)
+        w2, *_ = build(r2, settings=s, monitors=lambda: [Rect(5000, 0, 1920, 1080)])
         assert w2.placed != (10, 20)
     finally:
         r2.destroy()
@@ -240,3 +241,19 @@ def test_tooltip_and_cursor_cache(root):
     assert cache.position() is None
     cache.update(root)
     assert cache.virtual_rect() == cache.primary_rect() and cache.position() is not None
+
+
+def test_window_position_clamped_onto_visible_monitor(root):
+    # Saved position hangs off the right edge of a 1920x1080 monitor: pulled fully onto it.
+    s = DEFAULTS.replace(window_x=1900, window_y=-50)
+    w, *_ = build(root, settings=s, monitors=lambda: [Rect(0, 0, 1920, 1080)])
+    ww, _wh = w.size()
+    assert w.placed == (1920 - ww, 0)
+
+
+def test_window_monitor_enumeration_failure_falls_back(root):
+    def boom():
+        raise OSError("no monitors")
+
+    w, *_ = build(root, settings=DEFAULTS.replace(window_x=10, window_y=10), monitors=boom)
+    assert w.placed == (10, 10)

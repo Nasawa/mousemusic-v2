@@ -18,6 +18,7 @@ from typing import Any
 from mousemusic.mapping import Rect
 from mousemusic.ui import strings
 from mousemusic.ui.controller import AppController, Option
+from mousemusic.ui.placement import place_window
 
 log = logging.getLogger(__name__)
 
@@ -98,7 +99,7 @@ class MainWindow:
         tray: Any = None,
         version: str = "",
         open_url: Callable[[str], Any] = webbrowser.open,
-        on_screen: Callable[[int, int], bool] | None = None,
+        monitors: Callable[[], list[Rect]] | None = None,
         cursor_cache: TkCursorCache | None = None,
     ) -> None:
         self.root = root
@@ -107,7 +108,7 @@ class MainWindow:
         self.tray = tray
         self.version = version
         self.open_url = open_url
-        self.on_screen = on_screen
+        self.monitors = monitors
         self.cursor_cache = cursor_cache
         self.placed: tuple[int, int] | None = None
         self._refreshing = False
@@ -316,14 +317,17 @@ class MainWindow:
         w, h = self.size()
         s = self.ctl.settings
         x, y = s.window_x, s.window_y
-        check = self.on_screen or (
-            lambda px, py: (
-                0 <= px < self.root.winfo_screenwidth() and 0 <= py < self.root.winfo_screenheight()
-            )
-        )
-        if x is None or y is None or not check(x, y):
-            x = max(0, (self.root.winfo_screenwidth() - w) // 2)
-            y = max(0, (self.root.winfo_screenheight() - h) // 2)
+        primary = Rect(0, 0, max(1, self.root.winfo_screenwidth()),
+                       max(1, self.root.winfo_screenheight()))  # fmt: skip
+        try:
+            monitors = self.monitors() if self.monitors else [primary]
+        except Exception:
+            log.exception("enumerating monitors failed")
+            monitors = [primary]
+        # Primary is the monitor containing (0, 0) on Windows; fall back to Tk's screen.
+        primary = next((m for m in monitors if m.x <= 0 < m.x + m.w and m.y <= 0 < m.y + m.h),
+                       primary)  # fmt: skip
+        x, y = place_window((x, y), (w, h), monitors, primary)
         self.placed = (x, y)
         self.root.geometry(f"{w}x{h}+{x}+{y}")
         self.root.bind("<Configure>", self._on_configure, add="+")
