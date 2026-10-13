@@ -1,5 +1,6 @@
 """Real WinMM smoke test (§8): opens the GS synth and plays one note. Grace's machine only;
-skipped off Windows and when no MIDI output exists (CI runners)."""
+skipped off Windows and when no MIDI output exists. CI deselects it with `-m "not windows_audio"`:
+hosted Windows runners list the GS synth but have no audio endpoint, so open fails."""
 
 import sys
 import time

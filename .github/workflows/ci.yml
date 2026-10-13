@@ -44,7 +44,7 @@ jobs:
           ruff format --check .
 
       - name: Pytest
-        run: python -m pytest --cov=mousemusic --cov-report=term-missing
+        run: python -m pytest -m "not windows_audio" --cov=mousemusic --cov-report=term-missing
 
       - name: Coverage gate (>= 90% on pure core, ARCHITECTURE.md §8)
         run: python -m coverage report --include="*/mousemusic/config.py,*/mousemusic/midi/*,*/mousemusic/mapping.py,*/mousemusic/scales.py,*/mousemusic/instruments.py" --fail-under=90

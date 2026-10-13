@@ -23,10 +23,10 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def list_devices(backend_factory: Callable[[], MidiOut] = default_backend, out=print) -> int:
+def list_devices(backend_factory: Callable[[], MidiOut] | None = None, out=print) -> int:
     """``--list-devices`` (docs/ux.md §4 CLI copy). Never a traceback; always exits 0."""
     try:
-        names = backend_factory().list_devices()
+        names = (backend_factory or default_backend)().list_devices()
     except Exception:
         logging.getLogger(__name__).exception("enumerating MIDI devices failed")
         names = []
