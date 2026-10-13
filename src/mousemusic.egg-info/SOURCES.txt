@@ -1,0 +1,15 @@
+ARCHITECTURE.md
+LICENSE
+pyproject.toml
+src/mousemusic/__init__.py
+src/mousemusic/__main__.py
+src/mousemusic.egg-info/PKG-INFO
+src/mousemusic.egg-info/SOURCES.txt
+src/mousemusic.egg-info/dependency_links.txt
+src/mousemusic.egg-info/entry_points.txt
+src/mousemusic.egg-info/requires.txt
+src/mousemusic.egg-info/top_level.txt
+src/mousemusic/midi/__init__.py
+src/mousemusic/platform/__init__.py
+src/mousemusic/ui/__init__.py
+tests/test_cli.py
