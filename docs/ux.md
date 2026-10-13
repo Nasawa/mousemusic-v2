@@ -18,7 +18,7 @@ Design principles:
 - Title: `MouseMusic` (no version in the title bar. Version goes in the tray tooltip and `--version`.)
 - Size: **340 × 300** logical px at 100% scaling, fixed (not resizable). It's within the ≤ 360×300 budget in §10 P1.
   Tk handles DPI scaling. Don't hard-code physical px.
-- Position: centred on the primary monitor on first run, then last position remembered (see Open questions Q1).
+- Position: saved in `window_x`/`window_y` (logical px, `null` = centre on primary). On load, if the saved point isn't on any monitor's work area, centre the window and don't overwrite the saved values until the user moves it (§11 UX-Q1).
 - Icon: `assets/icon.ico` (P2).
 - Layout: ttk `grid`, two columns (label right-aligned, control left-aligned), 8 px padding, 4 px row gap.
 
@@ -33,7 +33,7 @@ Design principles:
 │          Key  [ C  ▾ ]                          │   row 2
 │  Pitch range  [ C2 ▾ ]  to  [ C7 ▾ ]            │   row 3
 │  Instruments  [ Classic (8)            ▾ ]      │   row 4
-│       Volume  [━━━━━━━━━━━●━━━━]  90            │   row 5
+│       Volume  [━━━━━━━━━━━━●━━━]  80 %          │   row 5
 │  Note length  [━━━━●━━━━━━━━━━━]  250 ms        │   row 6
 │               [ ] Hold notes (legato)           │   row 7
 │  MIDI output  [ Microsoft GS Wavetable ▾ ] [⟳]  │   row 8  device + Reconnect
@@ -53,8 +53,8 @@ Hold notes → MIDI output → Reconnect. Start has focus when the window opens.
 | 1 | `Scale` | readonly Combobox | `Chromatic`, `Major`, `Minor`, `Pentatonic major`, `Pentatonic minor`, `Blues` | `Pentatonic major` | `scale` | Applies live while playing |
 | 2 | `Key` | readonly Combobox, narrow | `C`, `C♯`, `D`, `E♭`, `E`, `F`, `F♯`, `G`, `A♭`, `A`, `B♭`, `B` | `C` | `root` | Applies live. Disabled (greyed) when Scale = Chromatic, since key has no effect there |
 | 3 | `Pitch range` | two readonly Comboboxes + the word `to` | octaves `C0`…`C8` (MIDI 12…108), step 12 | `C2` to `C7` (36–96) | `low_note`, `high_note` | If the user picks low ≥ high, the other box moves so the range is at least one octave (no error). Only octave Cs are offered in the UI. A non-C value from the file shows its note name, e.g. `G2`, as an extra item |
-| 4 | `Instruments` | readonly Combobox | `Classic (8)`, `Mellow (7)`, `Percussive (7)`, `Piano only (1)`, `All 128 GM (128)` | `Classic (8)` | `instrument_set` | The number is the row count, i.e. how many bands the screen is split into top to bottom. Tooltip on hover: `Top of the screen to bottom: <names>` |
-| 5 | `Volume` | ttk.Scale + value label | 1–127 | 90 | `velocity` | Value label shows the raw number. Live |
+| 4 | `Instruments` | readonly Combobox | `Classic (8)`, `Mellow (6)`, `Percussive (7)`, `Piano only (1)`, `All 128 GM (128)` | `Classic (8)` | `instrument_set` | The number is the row count, i.e. how many bands the screen is split into top to bottom. Tooltip on hover: `Top of the screen to bottom: <names>` |
+| 5 | `Volume` | ttk.Scale + value label | 0–100 %, step 1 | 80 % | `volume` | Label `80 %`. Sent as CC7 Channel Volume (`round(volume*127/100)`) on open, on Start and on every change. Live. `velocity` (default 100) is file-only |
 | 6 | `Note length` | ttk.Scale + value label | 50–2000 ms, step 10 | 250 ms | `note_length_ms` | Label `250 ms`. **Disabled** when Hold notes is checked |
 | 7 | `Hold notes (legato)` | ttk.Checkbutton | on/off | off | `legato` | When on, a note holds until the cursor enters the next cell or until Stop |
 | 8 | `MIDI output` | readonly Combobox, ellipsized at ~24 chars, full name in tooltip | WinMM device names | `Microsoft GS Wavetable Synth` | `midi_device` | **Re-enumerates every time the dropdown opens** (§9). Choosing a device while playing silences, closes and reopens (engine `set_device`). If the list is empty the combobox shows `No MIDI output found` and is disabled |
@@ -63,7 +63,7 @@ Hold notes → MIDI output → Reconnect. Start has focus when the window opens.
 
 All settings save automatically (debounced 500 ms, per §4). There is **no Save, Apply, or OK button.**
 
-Not in the UI by design (file-only, per §4/§5): `poll_hz`, `screen_mode`, `start_on_launch`, `hotkey`, hysteresis.
+Not in the UI by design (file-only, per §4/§5/§11): `velocity`, `poll_hz`, `screen_mode`, `start_on_launch`, `hotkey`, hysteresis.
 
 ### 1.3 Status line
 
@@ -77,6 +77,8 @@ Format while playing: `<dot> <Note> · <Instrument> · <Device>`, where the devi
 | Opening / reconnecting | grey `●` | `Connecting to <device>…` / `Reconnecting…` |
 | Warning (still works) | amber `▲` | warning text from §4 |
 | Error (can't play) | red `■` | error text from §4 |
+
+Tray icon per state (P2, `assets/icons/`): Stopped → `tray-idle.ico`, Playing → `tray-playing.ico`, Error → `tray-error.ico`. Warnings keep the idle or playing icon.
 
 - Note names use sharps for display (`C♯4`) unless the key is a flat key (`F`, `B♭`, `E♭`, `A♭`), in which case flats are used. Octave numbering: middle C = `C4` (MIDI 60).
 - Instrument names come from `instruments.py` (title case, e.g. `Nylon Guitar`).
@@ -121,7 +123,7 @@ Format while playing: `<dot> <Note> · <Instrument> · <Device>`, where the devi
 | — | separator | |
 | 3 | `Quit` | Silences (note-off, All Notes Off, reset), closes the device, saves settings, exits. No confirmation |
 
-No checked states in v0.1. The architecture limits the menu to these three items. See Q3 for optional extras.
+No checked states in v0.1. The architecture limits the menu to these three items. No extras in v0.1 (§11 UX-Q3).
 
 ### 2.3 Notifications (tray balloons)
 Used only for these cases (they are seen when the window is hidden):
@@ -132,7 +134,7 @@ Used only for these cases (they are seen when the window is hidden):
 | Device lost while window hidden | `MouseMusic stopped` | `Lost connection to <device>. Click to open MouseMusic.` |
 | Hotkey couldn't register (startup) | — | Not a balloon: status-line warning only (§4) |
 
-Set a flag after the first-close balloon. See Q2 about where it's stored.
+After the first-close balloon, set `tray_hint_shown = true` (default `false`). It is separate from `first_run_done` (§11 UX-Q2).
 
 ---
 
@@ -154,7 +156,7 @@ Set a flag after the first-close balloon. See Q2 about where it's stored.
 6. User clicks Start (or Ctrl+Alt+M). The device opens and the status goes `Connecting…` then `Playing — move the mouse`.
 7. Moving the mouse plays notes. Set `first_run_done = true` on the **first successful Start**, not at launch, so a user
    who quits right away sees the hint again next time.
-8. First ✕ → hide to tray + first-close balloon (§2.3).
+8. First ✕ → hide to tray + first-close balloon (§2.3), shown only while `tray_hint_shown` is `false`, then set it to `true`.
 
 No wizard, no welcome dialog, no EULA screen.
 
@@ -183,7 +185,7 @@ README anchors (P4 must create them): `#no-sound`, `#no-midi-device`, `#device-b
 
 | ID | Cause | Exact message | Recovery |
 |---|---|---|---|
-| **W1** | Saved `midi_device` not found at startup or after re-enumeration. Falls back to device 0 (§9) | `"<saved device>" not found. Using <device 0> instead.` | Auto-selected. Clears on the next Start or on the user picking any device. The saved setting changes only if the user picks a device or plays with the fallback (see Q4) |
+| **W1** | Saved `midi_device` not found at startup or after re-enumeration. Falls back to device 0 (§9) | `"<saved device>" not found. Using <device 0> instead.` | Auto-selected. Clears on the next Start or on the user picking any device. The fallback is never written to `midi_device`. Only an explicit user pick writes it. W1 shows on each launch while the saved device is missing. Start/⟳ re-enumerate and reopen the saved device by name if it has come back (§11 UX-Q4, OQ-12) |
 | **W2** | Settings file corrupt → renamed `settings.json.bak`, defaults loaded (§4) | `Your settings file couldn't be read, so defaults were restored. The old file was saved as settings.json.bak.` | Shown at startup until the first Start or 15 s, whichever is later. Help → `#settings-reset` |
 | **W3** | Some settings values invalid → clamped or reset (§4) | `Some settings were out of range and have been reset.` | Same dismissal as W2. Details go in the log |
 | **W4** | Global hotkey taken: `RegisterHotKey` fails (another app owns Ctrl+Alt+M) or the `hotkey` string won't parse | `Ctrl+Alt+M is in use by another app, so the shortcut is off. Use the Start button.` | The hint next to Start changes to `(shortcut off)` in grey. App works normally otherwise. Clears after 15 s. The hint stays |
@@ -213,7 +215,7 @@ When the error clears, show the next pending warning, if any, then the normal st
 | `Space` / `Enter` | Window, Start focused | Toggle |
 | `Tab` / `Shift+Tab` | Window | Move focus (order in §1.1) |
 | `Alt+↓` or `F4` | Combobox | Open the list (standard ttk) |
-| `←` `→` | Slider | Step (Volume ±1, Note length ±10 ms). `PgUp`/`PgDn` ±10 / ±100 |
+| `←` `→` | Slider | Step (Volume ±1 %, Note length ±10 ms). `PgUp`/`PgDn` ±10 % / ±100 ms |
 | `Esc` | Window | Hide to tray |
 
 Mnemonic underlines (Alt+letter) are deferred to P2.
@@ -228,7 +230,7 @@ Mnemonic underlines (Alt+letter) are deferred to P2.
   blame ("you"), no error codes in the UI (log them).
 - Device names are shown verbatim, in quotes only when reporting one missing.
 - Use the real characters: `—` em dash, `…` ellipsis, `·` middle dot, `♯` `♭`.
-- Numbers come with their units: `250 ms`. Volume is unitless.
+- Numbers come with their units: `250 ms`, `80 %`.
 - Buttons are verbs (`Start`, `Stop`, `Quit`). Don't add "Are you sure?".
 - All strings live in one module (e.g. `ui/strings.py`) so P2/P4 can edit copy without touching logic. This is a suggestion, not a spec change.
 
@@ -257,24 +259,17 @@ Icon art and theming (P2), instrument set names/contents after listen test (P3),
 
 ---
 
-## 10. Open questions
+## 10. Open questions — all resolved
 
-- **Q1 Window position persistence.** Remembering the last position needs a new settings key (e.g. `window_x`,
-  `window_y`) that isn't in §4. Proposal: add it as optional keys, ignored if off-screen. Archimedes to confirm, or we
-  always centre.
-- **Q2 First-close balloon flag.** Needs a key such as `tray_hint_shown` (not in §4). Alternative: reuse
-  `first_run_done` (but that's set on first Start, so the semantics differ). Proposal: add `tray_hint_shown: false`.
-- **Q3 Tray extras.** The architecture fixes the tray at Start/Stop, Show window, Quit. Should we add checked items like
-  `Hold notes` or an `Instruments ▸` submenu? Recommend **no** for v0.1, to keep it simple.
-- **Q4 Fallback device persistence (W1).** If the saved device is missing, should the fallback overwrite
-  `midi_device`? Proposal: don't overwrite until the user picks one explicitly, so a temporarily unplugged synth comes back
-  on the next launch.
-- **Q5 Volume scale.** Volume maps to note-on `velocity` (1–127), not channel volume (CC7). The GS synth's velocity curve
-  is soft at the low end. Should Volume be 0–100% mapped to velocity, or would CC7 be better? Using CC7 would add a
-  message type, which is still a short message so the spec allows it. Defaulting to velocity per §4.
-- **Q6 Pitch-range granularity.** The UI offers octave Cs only (C0–C8). Is that enough, or do power users need
-  semitone ranges? (They can still edit the JSON.)
-- **Q7 Help link target.** Help links need a stable README URL. Use `https://github.com/Nasawa/mousemusic-v2#no-sound`
-  etc. P4 must keep these anchors.
-- **Q8 Mid-play device-loss detection (E4).** This depends on `midiOutShortMsg` returning errors. The GS synth may
-  fail silently on endpoint change (W6). G4 should confirm what's detectable.
+All of these were resolved by Archimedes in `ARCHITECTURE.md` §11. That section is binding, and this doc has been updated to match.
+
+| # | Question | Resolution (§11) |
+|---|---|---|
+| Q1 | Window position persistence | ✅ `window_x`/`window_y`, logical px, `null` = centre. Off-screen → centre, no overwrite until moved (§1) |
+| Q2 | First-close balloon flag | ✅ `tray_hint_shown` (default `false`), separate from `first_run_done` (§2.3, §3) |
+| Q3 | Tray extras | ✅ None in v0.1. Start/Stop, Show window, separator, Quit (§2.2) |
+| Q4 | Fallback device persistence | ✅ Never written to `midi_device`. W1 shows each launch while missing. The saved device is reopened when it's back (§4 W1) |
+| Q5 | Volume scale | ✅ `volume` 0–100 % (default 80) → CC7. `velocity` file-only, default 100 (§1.2) |
+| Q6 | Pitch-range granularity | ✅ Octave Cs (C0–C8) only. Semitones JSON-only, shown as an extra item (§1.2) |
+| Q7 | Help link target | ✅ `https://github.com/Nasawa/mousemusic-v2#<anchor>`, anchors defined in `ui/strings.py`. P4 keeps them (§4) |
+| Q8 | Mid-play device-loss detection | ✅ Any non-zero `midiOutShortMsg` → silence, close, stop (E4). No polling or auto-reconnect. Silent endpoint changes → manual ⟳ (W6) |
