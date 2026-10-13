@@ -144,3 +144,11 @@ def test_unknown_set():
 def test_invalid_set(programs):
     with pytest.raises(ValueError):
         InstrumentSet("bad", "Bad", programs)
+
+
+def test_repo_curation_file_parses_without_fallback():
+    """data/curation.json on main must be valid on its own (no silent built-in fallback)."""
+    path = instruments.curation_path()
+    sets, default = parse_curation(json.loads(path.read_text(encoding="utf-8")))
+    assert set(sets) == set(SPEC_SETS) and default in sets
+    assert (sets, default) == (INSTRUMENT_SETS, DEFAULT_INSTRUMENT_SET)
