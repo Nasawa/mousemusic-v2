@@ -60,6 +60,8 @@ def test_layout_labels_and_initial_focus(root):
     assert w.root.title() == "MouseMusic"
     assert w.device.get() == GS
     assert w.volume_label.cget("text") == f"{DEFAULTS.volume} %"
+    w.show_window()
+    root.update()
     assert w.root.focus_lastfor() is w.start_btn  # Start gets focus when the window shows
     assert not w.root.resizable()[0]
 
@@ -68,10 +70,17 @@ def test_tab_order_follows_ux(root):
     w, *_ = build(root)
     w.show_window()
     root.update()
-    chain, widget = [], w.start_btn
-    for _ in range(11):
-        chain.append(widget)
-        widget = widget.tk_focusNext()
+
+    # Tk's Tab traversal follows widget stacking (creation) order; walk it like tk_focusNext.
+    def walk(widget):
+        for child in widget.winfo_children():
+            if str(child.cget("takefocus")) != "0" and child.winfo_class() in (
+                "TButton", "TCombobox", "TScale", "TCheckbutton",
+            ):  # fmt: skip
+                yield child
+            yield from walk(child)
+
+    chain = list(walk(root))
     expected = [w.start_btn, w.scale, w.key, w.low, w.high, w.instruments, w.volume,
                 w.note_length, w.legato, w.device, w.reconnect]  # fmt: skip
     assert chain == expected

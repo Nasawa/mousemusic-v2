@@ -265,7 +265,7 @@ class MainWindow:
         )
         self.help.bind("<Button-1>", lambda e: self.open_help())
         self.help_anchor: str | None = None
-        self.start_btn.focus_set()
+        self._focused_once = False
 
     def close(self, *, balloon: bool = True) -> None:
         """✕ / Esc: hide to tray (§2.1). Without a tray (non-Windows dev runs) there would be
@@ -396,6 +396,9 @@ class MainWindow:
         self.root.deiconify()
         self.root.lift()
         self.root.focus_force()
+        if not self._focused_once:  # ux §1.1: Start has focus when the window first opens
+            self._focused_once = True
+            self.start_btn.focus_set()
 
     def hide_window(self) -> None:
         self.root.withdraw()
