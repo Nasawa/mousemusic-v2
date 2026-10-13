@@ -75,7 +75,7 @@ touching the core.
    blasts sound on launch.
 3. Controls: Start/Stop (also the global hotkey **Ctrl+Alt+M**, registered with `RegisterHotKey`, so no hook is needed),
    **Scale** (Chromatic, Major, Minor, Pentatonic major, Pentatonic minor, Blues), **Key/root** (C…B),
-   **Pitch range** (low/high octave, default C2–C7), **Instrument set**, **Volume**, **Note length**,
+   **Pitch range** (low/high octave, default C2–C7), **Instrument set**, **Volume** (CC7, 0–100 %), **Note length**,
    and a **MIDI output device** dropdown (default: Microsoft GS Wavetable Synth).
 4. Closing the window minimizes to the tray (one-time tooltip explains this). Tray → Quit exits, sends All Notes Off,
    and closes the device.
@@ -155,16 +155,30 @@ Defaults:
   "low_note": 36,
   "high_note": 96,
   "instrument_set": "classic",
-  "velocity": 90,
+  "volume": 80,
+  "velocity": 100,
   "note_length_ms": 250,
   "legato": false,
   "poll_hz": 125,
   "screen_mode": "virtual_desktop",
   "start_on_launch": false,
   "hotkey": "Ctrl+Alt+M",
-  "first_run_done": false
+  "first_run_done": false,
+  "tray_hint_shown": false,
+  "window_x": null,
+  "window_y": null
 }
 ```
+
+Key notes (added after the UX review of PR #1):
+- `volume` (0–100 %) is the UI **Volume** slider. It is sent as CC7 Channel Volume, `round(volume * 127 / 100)`,
+  on open, on Start and on every change. `velocity` (1–127) is file-only and fixed per note-on, because on the GS synth
+  velocity changes timbre as well as loudness and is very quiet at the low end.
+- `window_x`/`window_y` are logical px, `null` = centre on primary. On load, if the saved top-left point isn't inside any
+  current monitor's work area (`MonitorFromPoint(..., MONITOR_DEFAULTTONULL)`), centre instead and don't overwrite
+  until the window is moved.
+- `tray_hint_shown` is set after the first close-to-tray balloon. It is separate from `first_run_done`.
+- A fallback device (saved device missing) is **not** written to `midi_device`. Only an explicit user pick writes it.
 
 Pentatonic is the default because every note sounds consonant with every other, which makes the best first impression.
 Chromatic is available as a setting.
@@ -188,8 +202,8 @@ Chromatic is available as a setting.
 
 | Set | Programs (rows top → bottom) |
 |---|---|
-| `classic` (default) | 0 Piano, 11 Vibraphone, 24 Nylon Guitar, 40 Violin, 42 Cello, 56 Trumpet, 73 Flute, 71 Clarinet |
-| `mellow` | 4 E.Piano, 11 Vibraphone, 12 Marimba, 46 Harp, 48 Strings, 52 Choir Aahs, 89 Warm Pad |
+| `classic` (default) | 0 Grand Piano, 4 E.Piano 1, 11 Vibraphone, 12 Marimba, 24 Nylon Guitar, 45 Pizzicato Strings, 46 Harp, 105 Banjo |
+| `mellow` | 4 E.Piano 1, 11 Vibraphone, 10 Music Box, 108 Kalimba, 46 Harp, 88 New Age Pad |
 | `percussive` | 8 Celesta, 9 Glockenspiel, 12 Marimba, 13 Xylophone, 14 Tubular Bells, 108 Kalimba, 114 Steel Drums |
 | `single_piano` | 0 (one row, so Y does nothing and only pitch is heard) |
 | `full_gm` | 0..127 (v1 behaviour: 128 rows) |
@@ -203,6 +217,8 @@ Chromatic is available as a setting.
   same pitch on the new instrument, so the user hears the instrument boundary. That's needed for spatial learning.
 - **Rate limit:** at most 1 note-on per 30 ms (≈33 notes/s). If the cursor crosses several cells inside that window,
   only the most recent cell is played when the window ends (latest wins, never a queue). This fixes v1's backlog.
+- **Device loss:** any non-zero return from `midiOutShortMsg` triggers silence (best effort), close and stop (UX E4).
+  Endpoint changes behind the GS synth are usually *not* reported by WinMM, so recovery there is manual (Reconnect).
 - **Stop / Quit / device change / exception:** send note-off for the active note, then CC123 All Notes Off, then
   `midiOutReset`. No stuck notes, ever.
 
@@ -349,3 +365,46 @@ Work order: S1–S3 → (S4, P1) → S5–S7 → P2–P4 → G1–G4. Each task 
 - **G4 Latency & device report.** Measure perceived latency on the GS synth versus one alternative (e.g. VirtualMIDISynth).
   Test headphone unplug/replug and Bluetooth output.
   *AC:* short findings in an issue, with a recommendation on whether in-process synthesis is needed after v0.1.
+
+---
+
+## 11. Resolved design questions
+
+Decisions from the reviews of PR #1 (UX spec, Pragma Q1–Q8) and PR #2 (test plan, Grace OQ-1–OQ-12). They are
+binding. Where one overlaps an earlier section, this section wins.
+
+### UX spec (PR #1)
+
+| # | Decision |
+|---|---|
+| UX-Q1 | Window position is persisted in `window_x`/`window_y` (logical px, `null` = centre on primary). If the saved point is off every monitor's work area, centre and don't overwrite until the user moves the window. |
+| UX-Q2 | New key `tray_hint_shown` (default `false`), set after the first close-to-tray balloon. Separate from `first_run_done`. |
+| UX-Q3 | No tray extras in v0.1. Menu = Start/Stop, Show window (default), separator, Quit. |
+| UX-Q4 | A fallback device is never written to `midi_device`. Only an explicit user pick writes it. W1 shows each launch while the saved device is missing. |
+| UX-Q5 | The Volume slider = `volume` 0–100 % (default 80) → CC7 Channel Volume. `velocity` is file-only, default 100. |
+| UX-Q6 | The UI offers octave Cs only (C0–C8). Semitone ranges are JSON-only. A non-C value shows as an extra item. |
+| UX-Q7 | Help links = `https://github.com/Nasawa/mousemusic-v2#<anchor>`. Anchors: `no-sound`, `no-midi-device`, `device-busy`, `settings-reset`, defined in `ui/strings.py`. P4 must keep them. |
+| UX-Q8 | Device loss = any non-zero return from `midiOutShortMsg` → silence, close, stop (E4). Silent endpoint changes are handled with manual Reconnect (W6). |
+
+### Instrument curation (PR #4)
+
+| # | Decision |
+|---|---|
+| P3 | PR #4 curation accepted. §5 sets updated to fast-attack instruments, with Mellow cut to 6 rows. The row count is `len(programs)`, so any set size ≥ 1 is valid and the UI label shows the count (`Mellow (6)`). Source of truth for programs is `data/curation.json`, which `instruments.py` loads (bundled via the PyInstaller spec). The scale UI order is friendliest-first per `docs/curation.md`. Pending G4 listen test, especially 105 Banjo and 88 New Age Pad. |
+
+### Test plan (PR #2)
+
+| # | Decision |
+|---|---|
+| OQ-1 | Same as UX-Q8. Detection is by `midiOutShortMsg` error return only, with **no polling** and **no auto-reconnect** in v0.1. The engine silences what it can, closes, stops, shows E4 (plus a balloon if the window is hidden). The next Start reopens. |
+| OQ-2 | Accepted limitation. A hard kill relies on WinMM closing the handle. Downstream receivers of virtual or hardware ports may keep a stuck note, and we can't prevent that from a killed process. This is documented in the README troubleshooting (`#no-sound`: "send All Notes Off / restart the receiver"). SN-07 records the result and doesn't block the release. |
+| OQ-3 | Handle sleep/resume. On `WM_POWERBROADCAST` `PBT_APMSUSPEND`: run the full silence path and close the device, remembering whether it was playing. On `PBT_APMRESUMEAUTOMATIC`: reopen the device and resume **only if it was playing**. If the reopen fails → E4. The hotkey thread's message window receives the broadcast and posts commands to the engine. |
+| OQ-4 | Release gate on VirusTotal: **≤ 3 detections** on the exe **and** none from Microsoft Defender. More than 3 (or any Defender hit) blocks the release until a false-positive submission clears it or the build is changed. The zip follows the same rule. The counts are recorded in the RC checklist. |
+| OQ-5 | If `RegisterHotKey` fails → W4 (status line, 15 s) and the Start hint reads `(shortcut off)`. The `hotkey` key stays **file-only** in v0.1 (format `Ctrl+Alt+M`, modifiers Ctrl/Alt/Shift/Win plus one A–Z/0–9/F1–F12 key). An unparsable value → W4 and the default is not used. |
+| OQ-6 | Targets: **internal** cell-change → `short_msg` ≤ 1 tick (8 ms) outside rate limiting (blocking, automated). **Tick jitter** on real Windows with `timeBeginPeriod(1)`: p95 ≤ 4 ms, max ≤ 20 ms over 60 s (blocking). **End-to-end on the GS synth**: median ≤ 100 ms, p95 ≤ 150 ms on wired output (informational, not blocking). If the median is over 100 ms on most test machines, G4 recommends in-process synthesis. |
+| OQ-7 | Over a 30-min soak: working set grows ≤ **10 MB** over the post-warm-up value at 2 min. Handle count grows ≤ **50**. Thread count is constant. CPU stays < 2 %. Anything over these is a blocker. |
+| OQ-8 | Validation ranges: `volume` 0–100. `velocity` 1–127. `note_length_ms` 50–2000. `poll_hz` 30–250. `low_note`/`high_note` 0–127. Each key is clamped independently. If `high_note - low_note < 12` after clamping: keep `low_note` and set `high_note = min(127, low_note + 12)`; if that still gives less than 12, set `low_note = high_note - 12`. Wrong types or unknown enums → that key's default, with warning W3. |
+| OQ-9 | `schema` > supported: best-effort load of known keys with validation, **no rewrite** of the file (so newer builds keep their data) unless the user changes a setting. The first save writes the current schema. Log a warning, no UI message. `schema` missing or < current → run migrations in order. |
+| OQ-10 | Repeated corruption overwrites the single `settings.json.bak` (keep the latest one only, no accumulation). The overwrite is logged. |
+| OQ-11 | Unwritable location → W5 once per session, settings stay in memory, a retry happens on the next change, path and error are logged. No fallback to another location (no silent portable→APPDATA switch). |
+| OQ-12 | Yes. Start (and Reconnect) re-enumerates and opens the **saved** `midi_device` by name if present, even if a fallback was used earlier in the session. W1 clears once it's found. No background hot-plug watching. |
