@@ -317,7 +317,7 @@ def load_report(path: Path) -> LoadResult:
         return LoadResult(DEFAULTS, existed=True)
     try:
         raw = json.loads(text)
-    except ValueError:
+    except (ValueError, RecursionError):  # RecursionError: pathologically nested JSON
         raw = None
     if not isinstance(raw, dict):
         _backup_corrupt(path)
