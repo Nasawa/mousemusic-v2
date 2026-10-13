@@ -15,8 +15,10 @@ from mousemusic.ui.window import MainWindow, TkCursorCache, Tooltip
 from test_controller import GS, Clock, FakeEngine, FakeSaver
 
 
-@pytest.fixture
-def root():
+@pytest.fixture(scope="session")
+def tk_session():
+    # One Tcl interpreter per session: creating many tk.Tk() instances is flaky on Windows
+    # runners ("Can't find a usable tk.tcl"), so each test gets a Toplevel instead.
     try:
         r = tk.Tk()
     except tk.TclError as exc:
@@ -24,6 +26,14 @@ def root():
     r.withdraw()
     yield r
     r.destroy()
+
+
+@pytest.fixture
+def root(tk_session):
+    top = tk.Toplevel(tk_session)
+    top.withdraw()
+    yield top
+    top.destroy()
 
 
 class FakeTray:
@@ -205,7 +215,7 @@ def test_window_position_restore_and_offscreen(root):
     s = DEFAULTS.replace(window_x=10, window_y=20)
     w, *_ = build(root, settings=s, monitors=lambda: [Rect(0, 0, 1920, 1080)])
     assert w.placed == (10, 20)
-    r2 = tk.Tk()
+    r2 = tk.Toplevel(root.master)
     try:
         w2, *_ = build(r2, settings=s, monitors=lambda: [Rect(5000, 0, 1920, 1080)])
         assert w2.placed != (10, 20)
