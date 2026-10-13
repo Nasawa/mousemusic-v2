@@ -20,9 +20,9 @@ from mousemusic.instruments import (
 
 PR4 = Path(__file__).parent / "data" / "curation_pr4.json"
 
-SPEC_SETS = {
-    "classic": (0, 11, 24, 40, 42, 56, 73, 71),
-    "mellow": (4, 11, 12, 46, 48, 52, 89),
+SPEC_SETS = {  # ARCHITECTURE.md §5 as updated by §11 P3 (PR #4)
+    "classic": (0, 4, 11, 12, 24, 45, 46, 105),
+    "mellow": (4, 11, 10, 108, 46, 88),
     "percussive": (8, 9, 12, 13, 14, 108, 114),
     "single_piano": (0,),
     "full_gm": tuple(range(128)),
@@ -152,3 +152,11 @@ def test_repo_curation_file_parses_without_fallback():
     sets, default = parse_curation(json.loads(path.read_text(encoding="utf-8")))
     assert set(sets) == set(SPEC_SETS) and default in sets
     assert (sets, default) == (INSTRUMENT_SETS, DEFAULT_INSTRUMENT_SET)
+
+
+def test_builtin_fallback_matches_repo_curation_exactly():
+    """The fallback must never drift from data/curation.json (ids, labels, programs, order)."""
+    data = json.loads(instruments.curation_path().read_text(encoding="utf-8"))
+    sets, default = parse_curation(data)
+    assert list(sets.items()) == list(BUILTIN_INSTRUMENT_SETS.items())
+    assert default == BUILTIN_DEFAULT_SET
