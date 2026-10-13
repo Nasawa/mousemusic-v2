@@ -292,19 +292,29 @@ def _backup_corrupt(path: Path) -> None:
         log.warning("settings file %s is corrupt and could not be moved: %s", path, exc)
 
 
-def load(path: Path) -> Settings:
+@dataclass(frozen=True)
+class LoadResult:
+    """What :func:`load_report` found, so the UI can show W2 (corrupt) / W3 (issues)."""
+
+    settings: Settings
+    existed: bool = False
+    corrupt: bool = False
+    issues: tuple[str, ...] = ()
+
+
+def load_report(path: Path) -> LoadResult:
     """Load settings, never raising. See module docstring for the robustness rules."""
     try:
         text = path.read_text(encoding="utf-8")
     except FileNotFoundError:
-        return DEFAULTS
+        return LoadResult(DEFAULTS)
     except (OSError, UnicodeDecodeError) as exc:
         if isinstance(exc, UnicodeDecodeError):
             _backup_corrupt(path)
             _try_save(DEFAULTS, path)
-        else:
-            log.warning("could not read settings %s: %s; using defaults", path, exc)
-        return DEFAULTS
+            return LoadResult(DEFAULTS, existed=True, corrupt=True)
+        log.warning("could not read settings %s: %s; using defaults", path, exc)
+        return LoadResult(DEFAULTS, existed=True)
     try:
         raw = json.loads(text)
     except ValueError:
@@ -312,11 +322,16 @@ def load(path: Path) -> Settings:
     if not isinstance(raw, dict):
         _backup_corrupt(path)
         _try_save(DEFAULTS, path)
-        return DEFAULTS
+        return LoadResult(DEFAULTS, existed=True, corrupt=True)
     settings, issues = validate(raw)
     for issue in issues:
         log.warning("settings: %s", issue)
-    return settings
+    return LoadResult(settings, existed=True, issues=tuple(issues))
+
+
+def load(path: Path) -> Settings:
+    """Load settings, never raising (see :func:`load_report`)."""
+    return load_report(path).settings
 
 
 def save(settings: Settings, path: Path, *, retries: int = 3, retry_delay_s: float = 0.05) -> None:
@@ -384,8 +399,10 @@ class DebouncedSaver:
         path: Path,
         delay_s: float = SAVE_DEBOUNCE_S,
         timer_factory: TimerFactory = _thread_timer,
+        on_error: Callable[[], None] | None = None,
     ) -> None:
         self.path = path
+        self.on_error = on_error  # W5 hook; called on each failed save (UI shows it once)
         self.delay_s = delay_s
         self._timer_factory = timer_factory
         self._lock = threading.Lock()
@@ -413,4 +430,7 @@ class DebouncedSaver:
             settings, self._pending = self._pending, None
         if settings is None:
             return False
-        return _try_save(settings, self.path)
+        ok = _try_save(settings, self.path)
+        if not ok and self.on_error is not None:
+            self.on_error()
+        return ok

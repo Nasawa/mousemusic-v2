@@ -448,3 +448,36 @@ def test_debounce_save_failure_returns_false(tmp_path, caplog):
     with caplog.at_level(logging.WARNING):
         assert saver.flush() is False
     assert "could not save" in caplog.text
+
+
+def test_load_report_flags(tmp_path):
+    from mousemusic.config import load_report
+
+    p = tmp_path / "settings.json"
+    r = load_report(p)
+    assert r.settings == DEFAULTS and not r.existed and not r.corrupt and r.issues == ()
+    p.write_text('{"volume": 500}')
+    r = load_report(p)
+    assert r.existed and not r.corrupt and r.issues and r.settings.volume == 100
+    p.write_text("{bad")
+    assert load_report(p).corrupt
+    p.write_bytes(b"\xff\xfe")
+    assert load_report(p).corrupt
+    d = tmp_path / "dir.json"
+    d.mkdir()
+    r = load_report(d)
+    assert r.existed and not r.corrupt
+
+
+def test_saver_on_error_called(tmp_path):
+    blocker = tmp_path / "file"
+    blocker.write_text("x")
+    calls = []
+    saver = DebouncedSaver(
+        blocker / "settings.json",
+        timer_factory=lambda d, f: FakeTimer(d, f),
+        on_error=lambda: calls.append(1),
+    )
+    saver.request(DEFAULTS)
+    saver.flush()
+    assert calls == [1]

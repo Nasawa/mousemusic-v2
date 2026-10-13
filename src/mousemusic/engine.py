@@ -20,6 +20,7 @@ import queue
 import signal
 import threading
 import time
+from collections import deque
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any, Protocol
@@ -33,6 +34,8 @@ log = logging.getLogger(__name__)
 
 #: Screen metrics are re-read this often while playing (§9 hot-plug).
 METRICS_REFRESH_S = 2.0
+#: Tick intervals kept for jitter statistics (60 s at 125 Hz, test-plan LT-02).
+JITTER_WINDOW = 7500
 #: How long :meth:`Engine.shutdown` waits for the thread (§6).
 JOIN_TIMEOUT_S = 1.0
 
@@ -71,6 +74,21 @@ class Stats:
     total_tick_s: float = 0.0
     cpu_s: float = 0.0
     wall_s: float = 0.0
+    #: Recent tick-to-tick intervals in seconds (for the LT-02 jitter log).
+    intervals: deque[float] = field(default_factory=lambda: deque(maxlen=JITTER_WINDOW))
+    last_tick_at: float | None = None
+
+    def record_tick(self, now: float) -> None:
+        if self.last_tick_at is not None:
+            self.intervals.append(now - self.last_tick_at)
+        self.last_tick_at = now
+
+    def jitter(self, period_s: float) -> tuple[float, float] | None:
+        """``(p95, max)`` of ``|interval - period|`` in seconds, or None without data."""
+        if not self.intervals:
+            return None
+        dev = sorted(abs(i - period_s) for i in self.intervals)
+        return dev[min(len(dev) - 1, int(0.95 * len(dev)))], dev[-1]
 
 
 # Commands -----------------------------------------------------------------------------
@@ -82,6 +100,7 @@ START, STOP, SET_SETTINGS, SET_DEVICE, SET_VOLUME = (
     "set_volume",
 )
 SUSPEND, RESUME, QUIT, DISPLAY_CHANGED = "suspend", "resume", "quit", "display_changed"
+RECONNECT = "reconnect"
 
 
 class Engine:
@@ -166,6 +185,10 @@ class Engine:
             if self.was_playing_before_suspend:
                 self.was_playing_before_suspend = False
                 self.start(now, lost_on_failure=True)
+        elif cmd == RECONNECT:  # UX ⟳: close and reopen the selected device
+            if self.playing:
+                self.stop(emit=False)
+                self.start(now)
         elif cmd == DISPLAY_CHANGED:
             self.metrics_at = None
         elif cmd == QUIT:
@@ -315,8 +338,10 @@ class Engine:
                 now = self.clock()
                 if not self.playing:
                     next_tick = now
+                    self.stats.last_tick_at = None
                     continue
                 if now >= next_tick:
+                    self.stats.record_tick(now)
                     self.step(now)
                     next_tick += self.period_s
                     if next_tick <= now:  # fell behind (e.g. suspended): don't burst

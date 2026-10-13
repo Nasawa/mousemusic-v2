@@ -526,3 +526,28 @@ def test_signal_handler_custom_callback_and_unhookable():
     assert engine_mod.signal.SIGTERM not in nums
     hooks[engine_mod.signal.SIGINT](2, None)
     assert called == [1]
+
+
+def test_reconnect_reopens_when_playing_only():
+    eng, fake, _, events, _ = make()
+    eng.post("reconnect")
+    eng.step(0.0)
+    assert not fake.is_open
+    eng.post("start")
+    eng.step(0.1)
+    fake.log.clear()
+    eng.post("reconnect")
+    eng.step(0.2)
+    assert "close" in fake.log and fake.log[-1].startswith(("open", "msg"))
+    assert eng.playing and kinds(events).count("started") == 2
+
+
+def test_jitter_stats():
+    from mousemusic.engine import Stats
+
+    st = Stats()
+    assert st.jitter(0.008) is None
+    for t in (0.0, 0.008, 0.016, 0.030, 0.038):
+        st.record_tick(t)
+    p95, mx = st.jitter(0.008)
+    assert mx == pytest.approx(0.006) and p95 == pytest.approx(0.006)
