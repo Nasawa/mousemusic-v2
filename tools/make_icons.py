@@ -31,22 +31,26 @@ BADGES = {
 
 
 def svg(badge: str = "", small: bool = False) -> str:
-    # Mouse body (white) with an eighth note knocked out in indigo.
-    # small=True drops the button seam so the glyph stays clean at 16-24 px.
-    seam = (
-        ""
-        if small
-        else f'<line x1="128" y1="40" x2="128" y2="92" stroke="{BG}" stroke-width="10"/>'
+    # A wide, rounded computer mouse (white) with a visible left/right button split and a cord,
+    # plus an eighth note above-right of it. small=True (<= 24 px) thickens the strokes and
+    # enlarges the note so the mouse silhouette and button split survive at 16 px.
+    seam_w = 14 if small else 9
+    cord_w = 16 if small else 11
+    note = (
+        '<g fill="{ink}"><ellipse cx="184" cy="96" rx="26" ry="20" transform="rotate(-20 184 96)"/>'
+        '<rect x="196" y="24" width="16" height="74"/>'
+        '<path d="M196 24 C222 26 238 40 236 66 C228 54 218 50 212 50 L212 24 Z"/></g>'
+    ) if small else (
+        '<g fill="{ink}"><ellipse cx="190" cy="88" rx="22" ry="17" transform="rotate(-20 190 88)"/>'
+        '<rect x="200" y="28" width="12" height="62"/>'
+        '<path d="M200 28 C222 30 236 42 234 64 C226 54 218 50 212 50 L212 28 Z"/></g>'
     )
-    return f'''{SVG_OPEN}
+    return f'''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
   <rect x="8" y="8" width="240" height="240" rx="56" fill="{BG}"/>
-  <rect x="64" y="28" width="128" height="200" rx="64" fill="{INK}"/>
-  {seam}
-  <g fill="{BG}">
-    <ellipse cx="114" cy="182" rx="26" ry="20" transform="rotate(-20 114 182)"/>
-    <rect x="128" y="104" width="14" height="80"/>
-    <path d="M128 104 C150 104 168 116 168 140 C160 128 150 124 142 124 L142 104 Z"/>
-  </g>
+  <path d="M100 96 C100 70 110 52 128 40" fill="none" stroke="{INK}" stroke-width="{cord_w}" stroke-linecap="round"/>
+  <path d="M100 92 C144 92 160 124 160 160 C160 200 136 226 100 226 C64 226 40 200 40 160 C40 124 56 92 100 92 Z" fill="{INK}"/>
+  <path d="M40 150 L160 150 M100 92 L100 150" stroke="{BG}" stroke-width="{seam_w}" fill="none"/>
+  {note.format(ink=INK)}
   {badge}
 </svg>'''
 
