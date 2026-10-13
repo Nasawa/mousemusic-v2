@@ -60,7 +60,7 @@ def test_layout_labels_and_initial_focus(root):
     assert w.root.title() == "MouseMusic"
     assert w.device.get() == GS
     assert w.volume_label.cget("text") == f"{DEFAULTS.volume} %"
-    assert w.root.focus_get() in (w.start_btn, None)
+    assert w.root.focus_lastfor() is w.start_btn  # Start gets focus when the window shows
     assert not w.root.resizable()[0]
 
 
