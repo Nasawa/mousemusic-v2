@@ -75,7 +75,7 @@ touching the core.
    blasts sound on launch.
 3. Controls: Start/Stop (also the global hotkey **Ctrl+Alt+M**, registered with `RegisterHotKey`, so no hook is needed),
    **Scale** (Chromatic, Major, Minor, Pentatonic major, Pentatonic minor, Blues), **Key/root** (C…B),
-   **Pitch range** (low/high octave, default C2–C7), **Instrument set**, **Volume**, **Note length**,
+   **Pitch range** (low/high octave, default C2–C7), **Instrument set**, **Volume** (CC7, 0–100 %), **Note length**,
    and a **MIDI output device** dropdown (default: Microsoft GS Wavetable Synth).
 4. Closing the window minimizes to the tray (one-time tooltip explains this). Tray → Quit exits, sends All Notes Off,
    and closes the device.
@@ -155,16 +155,30 @@ Defaults:
   "low_note": 36,
   "high_note": 96,
   "instrument_set": "classic",
-  "velocity": 90,
+  "volume": 80,
+  "velocity": 100,
   "note_length_ms": 250,
   "legato": false,
   "poll_hz": 125,
   "screen_mode": "virtual_desktop",
   "start_on_launch": false,
   "hotkey": "Ctrl+Alt+M",
-  "first_run_done": false
+  "first_run_done": false,
+  "tray_hint_shown": false,
+  "window_x": null,
+  "window_y": null
 }
 ```
+
+Key notes (added after the UX review of PR #1):
+- `volume` (0–100 %) is the UI **Volume** slider. It is sent as CC7 Channel Volume, `round(volume * 127 / 100)`,
+  on open, on Start and on every change. `velocity` (1–127) is file-only and fixed per note-on, because on the GS synth
+  velocity changes timbre as well as loudness and is very quiet at the low end.
+- `window_x`/`window_y` are logical px, `null` = centre on primary. On load, if the saved top-left point isn't inside any
+  current monitor's work area (`MonitorFromPoint(..., MONITOR_DEFAULTTONULL)`), centre instead and don't overwrite
+  until the window is moved.
+- `tray_hint_shown` is set after the first close-to-tray balloon. It is separate from `first_run_done`.
+- A fallback device (saved device missing) is **not** written to `midi_device`. Only an explicit user pick writes it.
 
 Pentatonic is the default because every note sounds consonant with every other, which makes the best first impression.
 Chromatic is available as a setting.
@@ -203,6 +217,8 @@ Chromatic is available as a setting.
   same pitch on the new instrument, so the user hears the instrument boundary. That's needed for spatial learning.
 - **Rate limit:** at most 1 note-on per 30 ms (≈33 notes/s). If the cursor crosses several cells inside that window,
   only the most recent cell is played when the window ends (latest wins, never a queue). This fixes v1's backlog.
+- **Device loss:** any non-zero return from `midiOutShortMsg` triggers silence (best effort), close and stop (UX E4).
+  Endpoint changes behind the GS synth are usually *not* reported by WinMM, so recovery there is manual (Reconnect).
 - **Stop / Quit / device change / exception:** send note-off for the active note, then CC123 All Notes Off, then
   `midiOutReset`. No stuck notes, ever.
 
