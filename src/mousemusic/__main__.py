@@ -115,6 +115,12 @@ def list_devices(backend_factory: Callable[[], MidiOut] | None = None, out=print
 
 
 def main(argv: Sequence[str] | None = None) -> int:
+    import sys
+
+    from mousemusic.platform.console import attach_console, wants_console
+
+    if wants_console(sys.argv[1:] if argv is None else argv):
+        attach_console()  # windowed exe: show CLI output in the calling terminal
     args = build_parser().parse_args(argv)
     if args.list_devices:
         return list_devices()
