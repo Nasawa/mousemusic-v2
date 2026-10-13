@@ -1,0 +1,98 @@
+name: Release
+
+# ARCHITECTURE.md §7. Pushing a tag vX.Y.Z (or vX.Y.Z-rc1 etc., marked prerelease) builds the
+# onefile exe + portable zip, smoke-tests both with --self-test, and publishes a GitHub Release.
+on:
+  push:
+    tags: ["v*.*.*"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: build + publish (windows-latest)
+    runs-on: windows-latest
+    permissions:
+      contents: write # create the Release and upload assets
+    env:
+      SIGNING_CERT: ${{ secrets.SIGNING_CERT }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version-file: .python-version
+          cache: pip
+          cache-dependency-path: |
+            requirements.txt
+            requirements-dev.txt
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements-dev.txt -r requirements.txt
+          python -m pip install --no-deps -e .
+
+      - name: Validate tag
+        id: meta
+        shell: bash
+        run: python tools/release.py meta "$GITHUB_REF_NAME" | tee -a "$GITHUB_OUTPUT"
+
+      - name: Ruff + pytest (fail = no release)
+        run: |
+          ruff check .
+          ruff format --check .
+          python -m pytest -m "not windows_audio"
+
+      - name: Stamp version from tag
+        shell: bash
+        run: python tools/release.py stamp "$GITHUB_REF_NAME"
+
+      - name: Build onefile exe + onedir (UPX off, see mousemusic.spec)
+        shell: bash
+        run: |
+          pyinstaller --noconfirm mousemusic.spec
+          MM_ONEDIR=1 pyinstaller --noconfirm --distpath dist/onedir --workpath build/onedir mousemusic.spec
+
+      - name: Smoke test built exes (--self-test, 0 MIDI devices tolerated)
+        shell: pwsh
+        run: |
+          foreach ($exe in @("dist\MouseMusic.exe", "dist\onedir\MouseMusic\MouseMusic.exe")) {
+            # Windowed exe: Start-Process -Wait to get its exit code.
+            $p = Start-Process -FilePath $exe -ArgumentList "--self-test" -Wait -PassThru -NoNewWindow
+            if ($p.ExitCode -ne 0) { throw "$exe --self-test exited $($p.ExitCode)" }
+            Write-Host "$exe --self-test OK"
+          }
+
+      - name: Sign (placeholder; runs only when SIGNING_CERT is configured)
+        if: ${{ env.SIGNING_CERT != '' }}
+        shell: pwsh
+        run: Write-Host "Signing not configured yet (Azure Trusted Signing planned, §7)."
+
+      - name: Package assets + SHA256SUMS
+        shell: pwsh
+        env:
+          VERSION: ${{ steps.meta.outputs.version }}
+        run: |
+          New-Item -ItemType Directory -Force out | Out-Null
+          Copy-Item dist\MouseMusic.exe "out\MouseMusic-v$env:VERSION-win64.exe"
+          Compress-Archive -Path dist\onedir\MouseMusic -DestinationPath "out\MouseMusic-v$env:VERSION-win64-portable.zip"
+          python tools/release.py sums "out\MouseMusic-v$env:VERSION-win64.exe" "out\MouseMusic-v$env:VERSION-win64-portable.zip"
+
+      - name: Publish GitHub Release
+        # softprops/action-gh-release v3.0.3, pinned by commit SHA (§7)
+        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64
+        with:
+          name: MouseMusic v${{ steps.meta.outputs.version }}
+          prerelease: ${{ steps.meta.outputs.prerelease == 'true' }}
+          generate_release_notes: true
+          fail_on_unmatched_files: true
+          files: |
+            out/MouseMusic-v${{ steps.meta.outputs.version }}-win64.exe
+            out/MouseMusic-v${{ steps.meta.outputs.version }}-win64-portable.zip
+            out/SHA256SUMS.txt

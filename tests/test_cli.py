@@ -30,6 +30,7 @@ def test_self_test_passes_with_zero_devices():
     lines = []
     assert self_test(lambda: FakeMidiOut([]), out=lines.append) == 0
     assert [ln for ln in lines if ln.startswith("PASS")] == [
+        "PASS bundle",
         "PASS settings",
         "PASS mapping",
         "PASS midi",

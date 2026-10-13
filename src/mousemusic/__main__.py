@@ -83,6 +83,17 @@ def self_test(backend_factory: Callable[[], MidiOut] | None = None, out=print) -
         names = (backend_factory or default_backend)().list_devices()
         out(f"     {len(names)} MIDI output device(s)")
 
+    def bundle() -> None:
+        # Frozen builds must carry data/ and assets/ (mousemusic.spec datas).
+        from mousemusic.app import assets_dir
+        from mousemusic.instruments import curation_path
+
+        assert curation_path().is_file(), f"missing {curation_path()}"
+        for state in ("idle", "playing", "error"):
+            icon = assets_dir() / "icons" / f"tray-{state}.ico"
+            assert icon.is_file(), f"missing {icon}"
+
+    check("bundle", bundle)
     check("settings", settings_round_trip)
     check("mapping", mapping)
     check("midi", midi)

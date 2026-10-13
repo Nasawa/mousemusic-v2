@@ -213,7 +213,7 @@ def test_device_lost_balloon_only_when_hidden():
     ctl.hidden = True
     ctl.handle_event(Event("error", {"error": DeviceLostError("x", device=GS)}))
     assert ("notify", "MouseMusic stopped",
-            f"Lost connection to {GS}. Click to open MouseMusic.") in v.calls  # fmt: skip
+            f"Lost connection to {GS}. Open MouseMusic from the tray icon.") in v.calls  # fmt: skip
 
 
 def test_pick_device_writes_and_clears():

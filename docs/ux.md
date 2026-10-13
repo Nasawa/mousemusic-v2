@@ -131,7 +131,7 @@ Used only for these cases (they are seen when the window is hidden):
 | When | Title | Body |
 |---|---|---|
 | First close-to-tray | `MouseMusic is still running` | `It's in the system tray. Right-click the icon to quit.` (If playing: `It's still playing in the system tray. Press Ctrl+Alt+M to stop, or right-click the icon to quit.`) |
-| Device lost while window hidden | `MouseMusic stopped` | `Lost connection to <device>. Click to open MouseMusic.` |
+| Device lost while window hidden | `MouseMusic stopped` | `Lost connection to <device>. Open MouseMusic from the tray icon.` |
 | Hotkey couldn't register (startup) | — | Not a balloon: status-line warning only (§4) |
 
 After the first-close balloon, set `tray_hint_shown = true` (default `false`). It is separate from `first_run_done` (§11 UX-Q2).

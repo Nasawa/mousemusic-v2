@@ -53,7 +53,7 @@ jobs:
           $PREFIX python -m pytest -m "not windows_audio" --cov=mousemusic --cov-report=term-missing
 
       - name: Coverage gate (>= 90% on pure core, ARCHITECTURE.md §8)
-        run: python -m coverage report --include="*/mousemusic/config.py,*/mousemusic/scheduler.py,*/mousemusic/engine.py,*/mousemusic/platform/*,*/mousemusic/midi/*,*/mousemusic/mapping.py,*/mousemusic/scales.py,*/mousemusic/instruments.py,*/mousemusic/logs.py,*/mousemusic/ui/status.py,*/mousemusic/ui/controller.py,*/mousemusic/ui/strings.py,*/mousemusic/ui/window.py" --fail-under=90
+        run: python -m coverage report --include="*/mousemusic/config.py,*/mousemusic/scheduler.py,*/mousemusic/engine.py,*/mousemusic/platform/*,*/mousemusic/midi/*,*/mousemusic/mapping.py,*/mousemusic/scales.py,*/mousemusic/instruments.py,*/mousemusic/logs.py,*/mousemusic/ui/status.py,*/mousemusic/ui/controller.py,*/mousemusic/ui/strings.py,*/mousemusic/ui/window.py,*/mousemusic/ui/placement.py" --fail-under=90
 
       - name: --version smoke
         run: python -m mousemusic --version
@@ -63,3 +63,44 @@ jobs:
 
       - name: --self-test smoke (no GUI)
         run: python -m mousemusic --self-test
+
+  build-exe:
+    # §7: build the exe on every PR/push and keep it 7 days so Grace can test PRs.
+    name: build exe (windows-latest)
+    needs: test
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version-file: .python-version
+          cache: pip
+          cache-dependency-path: |
+            requirements.txt
+            requirements-dev.txt
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements-dev.txt -r requirements.txt
+          python -m pip install --no-deps -e .
+
+      - name: Build onefile exe (UPX off, see mousemusic.spec)
+        run: |
+          python tools/release.py version-info
+          pyinstaller --noconfirm mousemusic.spec
+
+      - name: Smoke test built exe (--self-test)
+        shell: pwsh
+        run: |
+          $p = Start-Process -FilePath dist\MouseMusic.exe -ArgumentList "--self-test" -Wait -PassThru -NoNewWindow
+          if ($p.ExitCode -ne 0) { throw "MouseMusic.exe --self-test exited $($p.ExitCode)" }
+          Write-Host "MouseMusic.exe --self-test OK"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: MouseMusic-${{ github.sha }}-win64
+          path: dist/MouseMusic.exe
+          retention-days: 7
+          if-no-files-found: error

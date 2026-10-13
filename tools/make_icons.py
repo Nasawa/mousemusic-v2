@@ -15,16 +15,16 @@ ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / "assets" / "icons"
 PNG = OUT / "png"
 SIZES = [16, 20, 24, 32, 40, 48, 64, 256]
-BG = (
-    "#4F46E5"  # indigo: contrasts with both light (#F3F3F3) and dark (#202020) taskbars
-)
+BG = "#4F46E5"  # indigo: contrasts with both light (#F3F3F3) and dark (#202020) taskbars
 INK = "#FFFFFF"
+SVG_OPEN = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">'
+BADGE_RING = 'cx="200" cy="200" r="50" stroke="#FFFFFF" stroke-width="14"'
 
 BADGES = {
     "idle": "",
-    "playing": '<circle cx="200" cy="200" r="50" fill="#16A34A" stroke="#FFFFFF" stroke-width="14"/>'
+    "playing": f'<circle {BADGE_RING} fill="#16A34A"/>'
     '<path d="M184 176 L226 200 L184 224 Z" fill="#FFFFFF"/>',
-    "error": '<circle cx="200" cy="200" r="50" fill="#DC2626" stroke="#FFFFFF" stroke-width="14"/>'
+    "error": f'<circle {BADGE_RING} fill="#DC2626"/>'
     '<rect x="192" y="168" width="16" height="40" rx="6" fill="#FFFFFF"/>'
     '<circle cx="200" cy="226" r="9" fill="#FFFFFF"/>',
 }
@@ -38,7 +38,7 @@ def svg(badge: str = "", small: bool = False) -> str:
         if small
         else f'<line x1="128" y1="40" x2="128" y2="92" stroke="{BG}" stroke-width="10"/>'
     )
-    return f'''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
+    return f'''{SVG_OPEN}
   <rect x="8" y="8" width="240" height="240" rx="56" fill="{BG}"/>
   <rect x="64" y="28" width="128" height="200" rx="64" fill="{INK}"/>
   {seam}
@@ -53,11 +53,7 @@ def svg(badge: str = "", small: bool = False) -> str:
 
 def render(src: str, size: int) -> Image.Image:
     return Image.open(
-        BytesIO(
-            cairosvg.svg2png(
-                bytestring=src.encode(), output_width=size, output_height=size
-            )
-        )
+        BytesIO(cairosvg.svg2png(bytestring=src.encode(), output_width=size, output_height=size))
     ).convert("RGBA")
 
 

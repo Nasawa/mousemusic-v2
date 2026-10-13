@@ -109,3 +109,30 @@ class WinCursor:
     def primary_rect(self) -> Rect | None:
         m = self._user32.GetSystemMetrics
         return self._rect(0, 0, m(SM_CXSCREEN), m(SM_CYSCREEN))
+
+
+def monitor_work_areas(user32: Any = None) -> list[Rect]:  # pragma: no cover - Windows only
+    """Work areas (excluding the taskbar) of all currently attached monitors, physical px."""
+    u32 = user32 if user32 is not None else load_user32()
+
+    class MONITORINFO(ctypes.Structure):
+        _fields_ = [("cbSize", wintypes.DWORD), ("rcMonitor", wintypes.RECT),
+                    ("rcWork", wintypes.RECT), ("dwFlags", wintypes.DWORD)]  # fmt: skip
+
+    proc_t = ctypes.WINFUNCTYPE(
+        wintypes.BOOL, wintypes.HMONITOR, wintypes.HDC, ctypes.POINTER(wintypes.RECT),
+        wintypes.LPARAM,
+    )  # fmt: skip
+    found: list[Rect] = []
+
+    def cb(hmon: Any, _hdc: Any, _rect: Any, _data: Any) -> bool:
+        info = MONITORINFO()
+        info.cbSize = ctypes.sizeof(MONITORINFO)
+        if u32.GetMonitorInfoW(hmon, ctypes.byref(info)):
+            r = info.rcWork
+            if r.right > r.left and r.bottom > r.top:
+                found.append(Rect(r.left, r.top, r.right - r.left, r.bottom - r.top))
+        return True
+
+    u32.EnumDisplayMonitors(None, None, proc_t(cb), 0)
+    return found

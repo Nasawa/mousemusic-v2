@@ -72,6 +72,14 @@ def make_cursor(root: Any) -> tuple[Any, Any]:
     return cache, cache
 
 
+def make_monitors() -> Any:
+    if sys.platform == "win32":  # pragma: no cover - Windows only
+        from mousemusic.platform.win_cursor import monitor_work_areas
+
+        return monitor_work_areas
+    return None  # window falls back to Tk's screen size
+
+
 def show_fatal(text: str) -> None:  # pragma: no cover - Windows message box
     """F1: last-resort crash dialog (docs/ux.md §4)."""
     if sys.platform == "win32":
@@ -162,7 +170,7 @@ def _run_app(opts: Options, instance: Any) -> int:
     )  # fmt: skip
     window = MainWindow(
         root, controller, ui_queue=ui_queue, tray=tray, version=__version__,
-        cursor_cache=cache,
+        cursor_cache=cache, monitors=make_monitors(),
     )  # fmt: skip
     engine.start_thread()
     controller.startup(loaded)
