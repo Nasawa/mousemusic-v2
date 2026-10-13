@@ -165,8 +165,10 @@ class Engine:
 
     def handle(self, cmd: str, value: Any, now: float) -> None:
         if cmd == START:
+            self.was_playing_before_suspend = False  # an explicit choice overrides a stale wake
             self.start(now)
         elif cmd == STOP:
+            self.was_playing_before_suspend = False
             self.stop()
         elif cmd == SET_SETTINGS:
             self.apply_settings(value, now)
@@ -179,7 +181,8 @@ class Engine:
             self.pending_volume = value  # A-5: coalesced, sent once per tick
             self.settings = self.settings.replace(volume=value)
         elif cmd == SUSPEND:
-            self.was_playing_before_suspend = self.playing
+            # A repeated suspend (no resume in between) must not forget that we were playing.
+            self.was_playing_before_suspend = self.was_playing_before_suspend or self.playing
             self.stop(emit=self.playing)
         elif cmd == RESUME:
             if self.was_playing_before_suspend:
