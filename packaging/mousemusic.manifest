@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<!-- Merged into PyInstaller's default manifest by mousemusic.spec. DPI awareness is also set at
+     runtime first thing (platform/win_cursor.set_dpi_awareness); the manifest makes it apply
+     before any window exists (test plan DM-06). dpiAwareness (Win10 1607+) lists PerMonitorV2
+     then PerMonitor; older systems read dpiAware "true/pm" (per-monitor). -->
+<assembly xmlns="urn:schemas-microsoft-com:asm.v1" manifestVersion="1.0">
+  <application xmlns="urn:schemas-microsoft-com:asm.v3">
+    <windowsSettings>
+      <dpiAware xmlns="http://schemas.microsoft.com/SMI/2005/WindowsSettings">true/pm</dpiAware>
+      <dpiAwareness xmlns="http://schemas.microsoft.com/SMI/2016/WindowsSettings">PerMonitorV2, PerMonitor</dpiAwareness>
+    </windowsSettings>
+  </application>
+</assembly>

@@ -11,6 +11,7 @@ ROOT = Path(SPECPATH)
 ONEDIR = os.environ.get("MM_ONEDIR") == "1"
 VERSION_INFO = ROOT / "packaging" / "version_info.txt"
 ICON = ROOT / "assets" / "icon.ico"
+MANIFEST = ROOT / "packaging" / "mousemusic.manifest"  # DPI awareness (PerMonitorV2)
 
 a = Analysis(
     [str(ROOT / "src" / "mousemusic" / "__main__.py")],
@@ -29,6 +30,7 @@ common = dict(
     upx=False,
     console=False,  # --windowed
     icon=str(ICON),
+    manifest=str(MANIFEST),
     version=str(VERSION_INFO) if sys.platform == "win32" and VERSION_INFO.is_file() else None,
 )
 
