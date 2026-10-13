@@ -88,15 +88,16 @@ class InstrumentSet:
             raise ValueError(f"instrument set {self.name!r} has a program outside 0..127")
 
 
-#: ARCHITECTURE.md §5 sets, used only when ``data/curation.json`` is missing or invalid.
+#: Mirror of data/curation.json (§5 after §11 P3); used only when that file is missing or invalid.
+#: tests/test_instruments.py asserts the two stay identical.
 BUILTIN_INSTRUMENT_SETS: dict[str, InstrumentSet] = {
     s.name: s
     for s in (
-        InstrumentSet("classic", "Classic", (0, 11, 24, 40, 42, 56, 73, 71)),
-        InstrumentSet("mellow", "Mellow", (4, 11, 12, 46, 48, 52, 89)),
+        InstrumentSet("classic", "Classic", (0, 4, 11, 12, 24, 45, 46, 105)),
+        InstrumentSet("mellow", "Mellow", (4, 11, 10, 108, 46, 88)),
         InstrumentSet("percussive", "Percussive", (8, 9, 12, 13, 14, 108, 114)),
-        InstrumentSet("single_piano", "Single piano", (0,)),
-        InstrumentSet("full_gm", "Full General MIDI", tuple(range(128))),
+        InstrumentSet("single_piano", "Piano only", (0,)),
+        InstrumentSet("full_gm", "All 128 GM", tuple(range(128))),
     )
 }
 BUILTIN_DEFAULT_SET = "classic"
