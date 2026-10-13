@@ -202,8 +202,8 @@ Chromatic is available as a setting.
 
 | Set | Programs (rows top → bottom) |
 |---|---|
-| `classic` (default) | 0 Piano, 11 Vibraphone, 24 Nylon Guitar, 40 Violin, 42 Cello, 56 Trumpet, 73 Flute, 71 Clarinet |
-| `mellow` | 4 E.Piano, 11 Vibraphone, 12 Marimba, 46 Harp, 48 Strings, 52 Choir Aahs, 89 Warm Pad |
+| `classic` (default) | 0 Grand Piano, 4 E.Piano 1, 11 Vibraphone, 12 Marimba, 24 Nylon Guitar, 45 Pizzicato Strings, 46 Harp, 105 Banjo |
+| `mellow` | 4 E.Piano 1, 11 Vibraphone, 10 Music Box, 108 Kalimba, 46 Harp, 88 New Age Pad |
 | `percussive` | 8 Celesta, 9 Glockenspiel, 12 Marimba, 13 Xylophone, 14 Tubular Bells, 108 Kalimba, 114 Steel Drums |
 | `single_piano` | 0 (one row, so Y does nothing and only pitch is heard) |
 | `full_gm` | 0..127 (v1 behaviour: 128 rows) |
@@ -385,6 +385,12 @@ binding. Where one overlaps an earlier section, this section wins.
 | UX-Q6 | The UI offers octave Cs only (C0–C8). Semitone ranges are JSON-only. A non-C value shows as an extra item. |
 | UX-Q7 | Help links = `https://github.com/Nasawa/mousemusic-v2#<anchor>`. Anchors: `no-sound`, `no-midi-device`, `device-busy`, `settings-reset`, defined in `ui/strings.py`. P4 must keep them. |
 | UX-Q8 | Device loss = any non-zero return from `midiOutShortMsg` → silence, close, stop (E4). Silent endpoint changes are handled with manual Reconnect (W6). |
+
+### Instrument curation (PR #4)
+
+| # | Decision |
+|---|---|
+| P3 | PR #4 curation accepted. §5 sets updated to fast-attack instruments, with Mellow cut to 6 rows. The row count is `len(programs)`, so any set size ≥ 1 is valid and the UI label shows the count (`Mellow (6)`). Source of truth for programs is `data/curation.json`, which `instruments.py` loads (bundled via the PyInstaller spec). The scale UI order is friendliest-first per `docs/curation.md`. Pending G4 listen test, especially 105 Banjo and 88 New Age Pad. |
 
 ### Test plan (PR #2)
 
