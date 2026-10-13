@@ -43,14 +43,23 @@ jobs:
           ruff check .
           ruff format --check .
 
-      - name: Pytest
-        run: python -m pytest -m "not windows_audio" --cov=mousemusic --cov-report=term-missing
+      - name: Pytest (GUI tests headless via Xvfb on Ubuntu)
+        shell: bash
+        run: |
+          if [ "$RUNNER_OS" = "Linux" ]; then
+            sudo apt-get install -y --no-install-recommends xvfb >/dev/null
+            PREFIX="xvfb-run -a"
+          fi
+          $PREFIX python -m pytest -m "not windows_audio" --cov=mousemusic --cov-report=term-missing
 
       - name: Coverage gate (>= 90% on pure core, ARCHITECTURE.md §8)
-        run: python -m coverage report --include="*/mousemusic/config.py,*/mousemusic/scheduler.py,*/mousemusic/engine.py,*/mousemusic/platform/*,*/mousemusic/midi/*,*/mousemusic/mapping.py,*/mousemusic/scales.py,*/mousemusic/instruments.py" --fail-under=90
+        run: python -m coverage report --include="*/mousemusic/config.py,*/mousemusic/scheduler.py,*/mousemusic/engine.py,*/mousemusic/platform/*,*/mousemusic/midi/*,*/mousemusic/mapping.py,*/mousemusic/scales.py,*/mousemusic/instruments.py,*/mousemusic/logs.py,*/mousemusic/ui/status.py,*/mousemusic/ui/controller.py,*/mousemusic/ui/strings.py,*/mousemusic/ui/window.py" --fail-under=90
 
       - name: --version smoke
         run: python -m mousemusic --version
 
       - name: --list-devices smoke (real WinMM on Windows)
         run: python -m mousemusic --list-devices
+
+      - name: --self-test smoke (no GUI)
+        run: python -m mousemusic --self-test

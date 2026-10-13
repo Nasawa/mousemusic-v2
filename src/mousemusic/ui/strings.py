@@ -29,6 +29,72 @@ E5_UNEXPECTED = "Something went wrong and playback stopped. Click Start to try a
 
 # Warnings (amber ▲)
 W1_DEVICE_FALLBACK = '"{saved}" not found. Using {device} instead.'
+W2_SETTINGS_RESET = (
+    "Your settings file couldn't be read, so defaults were restored. "
+    "The old file was saved as settings.json.bak."
+)
+W2_HELP = ANCHOR_SETTINGS_RESET
+W3_SETTINGS_CLAMPED = "Some settings were out of range and have been reset."
+W4_HOTKEY_OFF = "{hotkey} is in use by another app, so the shortcut is off. Use the Start button."
+W5_CANT_SAVE = "Settings can't be saved right now. Changes will last until you quit."
+
+# Fatal (F1, Windows MessageBox before the window exists)
+F1_TITLE = "MouseMusic"
+F1_TEXT = (
+    "MouseMusic couldn't start.\n\nA log was saved to:\n"
+    "%LOCALAPPDATA%\\MouseMusic\\logs\\mousemusic.log"
+)
+
+# Window (docs/ux.md §1)
+WINDOW_TITLE = "MouseMusic"
+START = "▶  Start"
+STOP = "■  Stop"
+SHORTCUT_OFF = "(shortcut off)"
+LABEL_SCALE = "Scale"
+LABEL_KEY = "Key"
+LABEL_RANGE = "Pitch range"
+LABEL_RANGE_TO = "to"
+LABEL_INSTRUMENTS = "Instruments"
+LABEL_VOLUME = "Volume"
+LABEL_NOTE_LENGTH = "Note length"
+LABEL_LEGATO = "Hold notes (legato)"
+LABEL_MIDI = "MIDI output"
+RECONNECT_BUTTON = "⟳"
+RECONNECT_TOOLTIP = "Reconnect"
+INSTRUMENTS_TOOLTIP = "Top of the screen to bottom: {names}"
+HELP_LINK = "Help"
+VOLUME_VALUE = "{value} %"
+NOTE_LENGTH_VALUE = "{value} ms"
+KEY_LABELS = ("C", "C♯", "D", "E♭", "E", "F", "F♯", "G", "A♭", "A", "B♭", "B")
+
+# Status line (docs/ux.md §1.3, §3)
+STATUS_STOPPED = "Stopped — press Start or {hotkey}"
+STATUS_STOPPED_NO_HOTKEY = "Stopped — press Start"
+STATUS_PLAYING_IDLE = "Playing — move the mouse · {device}"
+STATUS_PLAYING = "{note} · {instrument} · {device}"
+STATUS_CONNECTING = "Connecting to {device}…"
+STATUS_RECONNECTING = "Reconnecting…"
+STATUS_FIRST_RUN = "Click Start, then move your mouse. Left↔right = pitch, up↕down = instrument."
+DOT_NORMAL = "●"
+DOT_WARNING = "▲"
+DOT_ERROR = "■"
+
+# Tray (docs/ux.md §2)
+TRAY_TOOLTIP_STOPPED = "MouseMusic v{version} — Stopped"
+TRAY_TOOLTIP_PLAYING = "MouseMusic v{version} — Playing"
+TRAY_TOOLTIP_ERROR = "MouseMusic v{version} — No sound (click for details)"
+TRAY_START = "Start"
+TRAY_STOP = "Stop"
+TRAY_SHOW = "Show window"
+TRAY_QUIT = "Quit"
+BALLOON_FIRST_CLOSE_TITLE = "MouseMusic is still running"
+BALLOON_FIRST_CLOSE = "It's in the system tray. Right-click the icon to quit."
+BALLOON_FIRST_CLOSE_PLAYING = (
+    "It's still playing in the system tray. "
+    "Press {hotkey} to stop, or right-click the icon to quit."
+)
+BALLOON_LOST_TITLE = "MouseMusic stopped"
+BALLOON_LOST = "Lost connection to {device}. Click to open MouseMusic."
 
 # Device combobox placeholder when the list is empty
 NO_DEVICE_COMBO = "No MIDI output found"

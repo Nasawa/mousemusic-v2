@@ -188,3 +188,21 @@ def get_instrument_set(name: str) -> InstrumentSet:
         return INSTRUMENT_SETS[name]
     except KeyError:
         raise ValueError(f"unknown instrument set: {name!r}") from None
+
+
+def load_scale_order(path: Path | None = None) -> tuple[str, ...]:
+    """Scale ids in UI order: friendliest first, from ``scales`` in data/curation.json (§11 P3).
+    Unknown ids are dropped, missing ones appended in their default order."""
+    from mousemusic.scales import SCALE_LABELS
+
+    path = curation_path() if path is None else path
+    order: list[str] = []
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        for entry in data.get("scales", []):
+            sid = entry.get("id") if isinstance(entry, Mapping) else None
+            if sid in SCALE_LABELS and sid not in order:
+                order.append(sid)
+    except (OSError, ValueError, AttributeError) as exc:
+        log.info("scale order: using defaults (%s)", exc)
+    return tuple(order + [s for s in SCALE_LABELS if s not in order])

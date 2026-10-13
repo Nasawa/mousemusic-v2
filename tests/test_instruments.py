@@ -160,3 +160,18 @@ def test_builtin_fallback_matches_repo_curation_exactly():
     sets, default = parse_curation(data)
     assert list(sets.items()) == list(BUILTIN_INSTRUMENT_SETS.items())
     assert default == BUILTIN_DEFAULT_SET
+
+
+def test_scale_order_from_curation(tmp_path):
+    from mousemusic.instruments import load_scale_order
+
+    assert load_scale_order() == (
+        "pentatonic_major", "pentatonic_minor", "major", "minor", "blues", "chromatic",
+    )  # fmt: skip
+    p = tmp_path / "c.json"
+    p.write_text('{"scales": [{"id": "blues"}, {"id": "nope"}, "x", {"id": "blues"}]}')
+    assert load_scale_order(p)[:2] == ("blues", "chromatic")
+    assert len(load_scale_order(p)) == 6
+    assert load_scale_order(tmp_path / "missing.json")[0] == "chromatic"
+    p.write_text("[]")
+    assert len(load_scale_order(p)) == 6
