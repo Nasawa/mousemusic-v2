@@ -1,2 +1,0 @@
-[console_scripts]
-mousemusic = mousemusic.__main__:main
