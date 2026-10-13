@@ -1,0 +1,41 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "mousemusic"
+dynamic = ["version"]
+description = "Cursor position drives MIDI output: X -> pitch, Y -> instrument."
+readme = "ARCHITECTURE.md"
+license = { file = "LICENSE" }
+requires-python = ">=3.12,<3.13"
+dependencies = ["pystray", "Pillow"]  # exact pins live in requirements.txt
+
+[project.scripts]
+mousemusic = "mousemusic.__main__:main"
+
+[tool.setuptools.dynamic]
+version = { attr = "mousemusic.__version__" }
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "SIM", "RUF"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+addopts = "-ra"
+markers = [
+    "windows_audio: needs a real Windows MIDI output device (skipped on CI runners)",
+]
+
+[tool.coverage.run]
+source = ["mousemusic"]
+branch = true
