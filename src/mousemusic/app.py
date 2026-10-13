@@ -47,10 +47,9 @@ class Options:
 
 def assets_dir() -> Path:
     """``assets/`` next to the bundled app (PyInstaller ``_MEIPASS``) or at the repo root."""
-    base = getattr(sys, "_MEIPASS", None)
-    if base:
-        return Path(base) / "assets"
-    return Path(__file__).resolve().parents[2] / "assets"
+    from mousemusic.ui.appicon import find_assets_dir
+
+    return find_assets_dir()
 
 
 def make_backend(settings: config.Settings, dry_run: bool) -> MidiOut:
@@ -102,6 +101,10 @@ def run(opts: Options) -> int:
 
 
 def _run(opts: Options) -> int:
+    from mousemusic.ui.appicon import set_app_user_model_id
+
+    # Before any window exists, so the taskbar shows MouseMusic's icon, not python's/Tk's.
+    log.info("AppUserModelID set: %s", set_app_user_model_id())
     if sys.platform == "win32":  # pragma: no cover - Windows only
         from mousemusic.platform.win_cursor import set_dpi_awareness
 
@@ -131,6 +134,9 @@ def _run_app(opts: Options, instance: Any) -> int:
 
     root = (opts.root_factory or tk.Tk)()
     root.withdraw()
+    from mousemusic.ui.appicon import apply_window_icon
+
+    log.info("window icon: %s", apply_window_icon(root, assets_dir()) or "Tk default")
     cursor, cache = make_cursor(root)
     backend = make_backend(settings, opts.dry_run)
     timer = None
