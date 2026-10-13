@@ -91,12 +91,21 @@ jobs:
           python tools/release.py version-info
           pyinstaller --noconfirm mousemusic.spec
 
-      - name: Smoke test built exe (--self-test)
+      - name: Smoke test built exe (--self-test exit code + output reaches the shell)
         shell: pwsh
         run: |
           $p = Start-Process -FilePath dist\MouseMusic.exe -ArgumentList "--self-test" -Wait -PassThru -NoNewWindow
           if ($p.ExitCode -ne 0) { throw "MouseMusic.exe --self-test exited $($p.ExitCode)" }
-          Write-Host "MouseMusic.exe --self-test OK"
+          # Piped: the windowed exe must write to the inherited handle (platform/console.py).
+          $out = (& dist\MouseMusic.exe --self-test | Out-String)
+          if ($LASTEXITCODE -ne 0) { throw "piped --self-test exited $LASTEXITCODE" }
+          Write-Host $out
+          foreach ($want in @("PASS bundle", "PASS settings", "PASS mapping", "PASS midi")) {
+            if (-not $out.Contains($want)) { throw "missing '$want' in --self-test output" }
+          }
+          $ver = (& dist\MouseMusic.exe --version | Out-String)
+          if (-not $ver.Contains("mousemusic ")) { throw "missing --version output: '$ver'" }
+          Write-Host "MouseMusic.exe --self-test OK (output visible)"
 
       - uses: actions/upload-artifact@v7
         with:
