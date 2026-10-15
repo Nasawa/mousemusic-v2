@@ -11,6 +11,7 @@ import contextlib
 import logging
 import queue
 import tkinter as tk
+import tkinter.font as tkfont
 import webbrowser
 from collections.abc import Callable
 from tkinter import ttk
@@ -19,6 +20,7 @@ from typing import Any
 from mousemusic.mapping import Rect
 from mousemusic.ui import strings
 from mousemusic.ui.controller import AppController, Option
+from mousemusic.ui.fit import HomePosition, fit_height, truncate, work_area_for
 from mousemusic.ui.placement import place_window
 from mousemusic.ui.theme import DARK, HIGH_CONTRAST, PALETTES, role_color
 
@@ -42,7 +44,7 @@ class Tooltip:
         return self.text() if callable(self.text) else self.text
 
     def show(self, _event: Any = None) -> None:
-        if self.tip is not None:
+        if self.tip is not None or not self.current_text():
             return
         x = self.widget.winfo_rootx() + 10
         y = self.widget.winfo_rooty() + self.widget.winfo_height() + 4
@@ -109,6 +111,7 @@ class MainWindow:
         monitors: Callable[[], list[Rect]] | None = None,
         cursor_cache: TkCursorCache | None = None,
         title_bar: Callable[[Any, bool], Any] | None = None,
+        announce: Callable[[int, str], Any] | None = None,
     ) -> None:
         self.root = root
         self.ctl = controller
@@ -118,6 +121,9 @@ class MainWindow:
         self.open_url = open_url
         self.monitors = monitors
         self.cursor_cache = cursor_cache
+        self.announce = announce  # (status hwnd, full text) -> screen readers (C-2)
+        self.full_status = ""
+        self.truncated = False
         self.title_bar = title_bar  # (root, dark) -> DWM immersive dark title bar (Windows)
         self.applied_theme: str | None = None
         self.style = ttk.Style(root)
@@ -288,14 +294,38 @@ class MainWindow:
         self.dot.grid(row=0, column=0)
         # No fixed width: wraplength follows the window width (see _fit) so long warnings
         # wrap onto more lines and the window grows instead of truncating.
-        self.status = ttk.Label(sf, justify="left", anchor="w", style="Status.TLabel")
+        self.status = ttk.Label(sf, justify="left", anchor="w", style="Status.TLabel",
+                                takefocus=0)  # fmt: skip
         self.status.grid(row=0, column=1, sticky="ew", padx=(4, 0))
+        # Full text when truncated (B-2); always available to keyboard users (C-2).
+        self.status_tip = Tooltip(self.status, lambda: self.full_status if self.truncated else "")
         self.help = ttk.Label(sf, text=strings.HELP_LINK, cursor="hand2", style="Link.TLabel")
         self.help.bind("<Button-1>", lambda e: self.open_help())
         self.help_anchor: str | None = None
+        self._status_in_tab_order()
         self._focused_once = False
         self._fit_key: tuple | None = None
         self.height = 0
+
+    def _status_in_tab_order(self) -> None:
+        """C-2: the status line is focusable right after Reconnect (it lives in another
+        frame, so the stacking order alone would put it last)."""
+
+        def jump(target: tk.Widget) -> Callable[[Any], str]:
+            def go(_e: Any) -> str:
+                target.focus_set()
+                return "break"
+
+            return go
+
+        self.reconnect.bind("<Tab>", jump(self.status))
+        self.status.bind("<Tab>", jump(self.hotkey))
+        self.status.bind("<Shift-Tab>", jump(self.reconnect))
+        self.status.bind("<ISO_Left_Tab>", jump(self.reconnect))
+        self.hotkey.bind("<Shift-Tab>", jump(self.status))
+        self.hotkey.bind("<ISO_Left_Tab>", jump(self.status))
+        self.status.bind("<FocusIn>", lambda e: self.status.state(["focus"]), add="+")
+        self.status.bind("<FocusOut>", lambda e: self.status.state(["!focus"]), add="+")
 
     def _on_focus_in(self, event: Any) -> None:
         if event.widget is self.root:  # backup for a missed WM_SETTINGCHANGE (ux §11.2)
@@ -470,6 +500,8 @@ class MainWindow:
         primary = next((m for m in monitors if m.x <= 0 < m.x + m.w and m.y <= 0 < m.y + m.h),
                        primary)  # fmt: skip
         x, y = place_window((x, y), (w, h), monitors, primary)
+        self.work_areas, self.primary = monitors, primary
+        self.home = HomePosition((x, y))  # C-1
         self.placed = (x, y)
         self.root.geometry(f"{w}x{h}+{x}+{y}")
         self.height = h
@@ -479,7 +511,9 @@ class MainWindow:
         if event.widget is not self.root:
             return
         pos = (self.root.winfo_x(), self.root.winfo_y())
-        if self.placed is not None and pos != self.placed and self.root.winfo_viewable():
+        if self.placed is None or not self.root.winfo_viewable():
+            return
+        if self.home.user_moved(pos):  # not our own geometry(): becomes home, is saved
             self.placed = pos
             self.ctl.window_moved(*pos)
 
@@ -539,7 +573,10 @@ class MainWindow:
             )
         except tk.TclError:  # system colour names (high contrast) exist only on Windows Tk
             self.dot.configure(text=status.dot, foreground="")
+        self.full_status = status.text
         self.status.configure(text=status.text)
+        if self.announce is not None:
+            self.announce(self.status.winfo_id(), status.text)
         self.help_anchor = status.help_anchor
         if status.help_anchor:
             self.help.grid(row=0, column=2, padx=(4, 0))
@@ -558,20 +595,37 @@ class MainWindow:
             used += self.help.winfo_reqwidth() + round(4 * scale)
         return max(50, w - used)
 
+    def chrome_height(self) -> int:
+        """Title bar + frame, so the whole window (not just the client) fits the work area."""
+        return round(40 * self.size()[0] / WIDTH)
+
     def _fit(self) -> None:
-        """Re-wrap the status text and grow (or shrink back) the window height to fit."""
-        key = (self.status.cget("text"), self.help_anchor)
+        """Re-wrap the status, follow the content height within [360, work area] (B-2),
+        truncate past the cap, and re-place from home (B-3, C-1)."""
+        key = (self.full_status, self.help_anchor)
         if key == self._fit_key:
             return
         self._fit_key = key
-        self.status.configure(wraplength=self.status_wraplength())
+        wl = self.status_wraplength()
+        self.status.configure(text=self.full_status, wraplength=wl)
         self.root.update_idletasks()
         w, base_h = self.size()
-        h = max(base_h, self.root.winfo_reqheight())
-        if h != self.height:
+        required = self.root.winfo_reqheight()
+        area = work_area_for(self.home.home, (w, required), self.work_areas, self.primary)
+        cap = max(1, area.h - self.chrome_height())
+        h = fit_height(required, base_h, cap)
+        self.truncated = required > cap
+        if self.truncated:
+            font = tkfont.nametofont("TkDefaultFont")
+            avail = self.status.winfo_reqheight() - (required - cap)
+            lines = max(1, avail // max(1, font.metrics("linespace")))
+            self.status.configure(text=truncate(self.full_status, wl, lines, font.measure))
+            log.info("status truncated to %d line(s); full text: %s", lines, self.full_status)
+        pos = self.home.position((w, h), self.work_areas, self.primary)
+        if h != self.height or pos != self.placed:
             self.height = h
-            x, y = self.placed or (self.root.winfo_x(), self.root.winfo_y())
-            self.root.geometry(f"{w}x{h}+{x}+{y}")
+            self.placed = pos
+            self.root.geometry(f"{w}x{h}+{pos[0]}+{pos[1]}")
 
     def show_window(self) -> None:
         self.root.deiconify()
