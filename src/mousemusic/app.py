@@ -22,6 +22,7 @@ from mousemusic import engine as eng
 from mousemusic.logs import log_dir, setup_logging
 from mousemusic.midi import MidiOut, default_backend
 from mousemusic.midi.fake import FakeMidiOut
+from mousemusic.platform import win_theme
 from mousemusic.platform.single_instance import SingleInstance
 from mousemusic.ui import strings
 from mousemusic.ui.controller import AppController
@@ -76,6 +77,20 @@ def make_monitors() -> Any:
 
         return monitor_work_areas
     return None  # window falls back to Tk's screen size
+
+
+def make_title_bar() -> Any:
+    """(root, dark) -> immersive dark title bar on the root's frame window (Windows only)."""
+    if sys.platform != "win32":
+        return None
+
+    def apply(root: Any, dark: bool) -> None:  # pragma: no cover - Windows only
+        root.update_idletasks()
+        hwnd = win_theme.frame_hwnd(root)
+        if hwnd:
+            win_theme.set_dark_title_bar(hwnd, dark)
+
+    return apply  # pragma: no cover - Windows only
 
 
 def show_fatal(text: str) -> None:  # pragma: no cover - Windows message box
@@ -174,11 +189,11 @@ def _run_app(opts: Options, instance: Any) -> int:
         settings, engine, saver, backend.list_devices, time.monotonic,
         hotkey_ok=hotkey_active is not None, hotkey_active=hotkey_active,
         hotkey_registrar=message_window.reregister if message_window else None,
-        first_run=not loaded.existed,
+        first_run=not loaded.existed, theme_probe=win_theme.probe,
     )  # fmt: skip
     window = MainWindow(
         root, controller, ui_queue=ui_queue, tray=tray, version=__version__,
-        cursor_cache=cache, monitors=make_monitors(),
+        cursor_cache=cache, monitors=make_monitors(), title_bar=make_title_bar(),
     )  # fmt: skip
     engine.start_thread()
     controller.startup(loaded)

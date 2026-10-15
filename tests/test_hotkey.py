@@ -83,3 +83,11 @@ def test_candidates_and_register_first():
     assert register_first(cands, lambda hk: hk.text != "Ctrl+Alt+M").text == "Ctrl+Alt+Shift+M"
     assert register_first(cands, lambda hk: False) is None
     assert register_first([], lambda hk: True) is None
+
+
+def test_settingchange_theme():
+    from mousemusic.platform.hotkey import SPI_SETHIGHCONTRAST, WM_SETTINGCHANGE, translate_message
+
+    assert translate_message(WM_SETTINGCHANGE, 0, None, "ImmersiveColorSet") == "theme_changed"
+    assert translate_message(WM_SETTINGCHANGE, SPI_SETHIGHCONTRAST) == "theme_changed"
+    assert translate_message(WM_SETTINGCHANGE, 0, None, "Environment") is None

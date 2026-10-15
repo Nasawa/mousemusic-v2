@@ -93,7 +93,7 @@ def test_tab_order_follows_ux(root):
 
     chain = list(walk(root))
     expected = [w.start_btn, w.scale, w.key, w.low, w.high, w.instruments, w.volume,
-                w.note_length, w.legato, w.device, w.reconnect, w.hotkey]  # fmt: skip
+                w.note_length, w.legato, w.device, w.reconnect, w.hotkey, w.theme]  # fmt: skip
     assert chain == expected
 
 
@@ -296,3 +296,65 @@ def test_hotkey_picker(root):
     w.hotkey.event_generate("<<ComboboxSelected>>")
     root.update()
     assert ctl.settings.hotkey == "Ctrl+Alt+P"
+
+
+@pytest.mark.parametrize("theme", ["light", "dark"])
+def test_palette_applied(root, theme):
+    from mousemusic.ui.theme import PALETTES
+
+    calls = []
+    w, _ctl, *_ = build(root, settings=DEFAULTS.replace(theme=theme),
+                       title_bar=lambda r, dark: calls.append(dark))  # fmt: skip
+    p = PALETTES[theme]
+    assert w.applied_theme == theme and calls[-1] == (theme == "dark")
+    assert w.style.theme_use() == "clam"
+    assert str(root.cget("bg")).upper() == p["bg"]
+    assert str(w.style.lookup("Hint.TLabel", "foreground")).upper() == p["text_secondary"]
+    assert str(w.style.lookup("Accent.TButton", "background")).upper() == p["accent"]
+    assert str(w.style.lookup("Link.TLabel", "foreground")).upper() == p["link"]
+    assert str(w.dot.cget("foreground")).upper() == p["dot_idle"]
+    assert w.start_btn.cget("style") == "Accent.TButton"
+    pd = root.tk.call("ttk::combobox::PopdownWindow", w.scale)
+    assert str(root.tk.call(f"{pd}.f.l", "cget", "-background")).upper() == p["surface"]
+
+
+def test_live_theme_switch_and_high_contrast(root):
+    probe = [(True, False)]
+    dev = [GS]
+    from mousemusic.ui.controller import AppController as AC
+
+    ctl = AC(DEFAULTS, FakeEngine(), FakeSaver(), lambda: dev, Clock(),
+             theme_probe=lambda: probe[-1])  # fmt: skip
+    w = MainWindow(root, ctl, tray=FakeTray(), open_url=lambda u: None)
+    ctl.startup()
+    assert w.applied_theme == "light"
+    assert list(w.theme.cget("values")) == ["System (Light)", "Light", "Dark"]
+    probe.append((False, False))  # Windows switched to dark
+    ctl.clock.t = 5
+    ctl.dispatch(("theme_changed", None))
+    assert w.applied_theme == "dark" and w.theme.get() == "System (Dark)"
+    probe.append((False, True))  # high contrast on
+    ctl.clock.t = 6
+    w._on_focus_in(type("E", (), {"widget": root})())
+    assert w.applied_theme == "high_contrast"
+    assert w.style.theme_use() != "clam"
+    assert ctl.theme_tooltip() == strings.THEME_TOOLTIP_HC
+    # picker still works (saved) while high contrast wins
+    w.theme.current(1)
+    w.theme.event_generate("<<ComboboxSelected>>")
+    root.update()
+    assert ctl.settings.theme == "light" and w.applied_theme == "high_contrast"
+    probe.append((False, False))  # high contrast off -> saved explicit theme
+    ctl.clock.t = 7
+    ctl.dispatch(("theme_changed", None))
+    assert w.applied_theme == "light"
+    w._on_focus_in(type("E", (), {"widget": w.start_btn})())  # child focus: ignored
+
+
+def test_tooltip_uses_palette(root):
+    w, *_ = build(root, settings=DEFAULTS.replace(theme="dark"))
+    w.show_window()
+    root.update()
+    w.theme_tip.show()
+    assert str(w.theme_tip.tip.cget("bg")).upper() == "#2D2D2D"
+    w.theme_tip.hide()

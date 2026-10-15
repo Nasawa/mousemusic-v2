@@ -7,6 +7,7 @@ actions; :meth:`MainWindow.refresh` copies controller state back into the widget
 
 from __future__ import annotations
 
+import contextlib
 import logging
 import queue
 import tkinter as tk
@@ -19,15 +20,18 @@ from mousemusic.mapping import Rect
 from mousemusic.ui import strings
 from mousemusic.ui.controller import AppController, Option
 from mousemusic.ui.placement import place_window
+from mousemusic.ui.theme import DARK, HIGH_CONTRAST, PALETTES, role_color
 
 log = logging.getLogger(__name__)
 
-WIDTH, HEIGHT = 340, 330  # logical px at 100 %; minimum height, grows to fit (ux §1)
+WIDTH, HEIGHT = 340, 360  # logical px at 100 %; minimum height, grows to fit (ux §1, Q-D1)
 DRAIN_MS = 50
 
 
 class Tooltip:
     """Minimal hover tooltip; ``text`` may be a callable for live text."""
+
+    bg: str | None = None  # tk Toplevel background, set by MainWindow.apply_theme
 
     def __init__(self, widget: tk.Widget, text: str | Callable[[], str]) -> None:
         self.widget, self.text, self.tip = widget, text, None
@@ -45,8 +49,11 @@ class Tooltip:
         self.tip = tk.Toplevel(self.widget)
         self.tip.wm_overrideredirect(True)
         self.tip.wm_geometry(f"+{x}+{y}")
+        if Tooltip.bg:
+            self.tip.configure(bg=Tooltip.bg)
         ttk.Label(
             self.tip,
+            style="Tooltip.TLabel",
             text=self.current_text(),
             relief="solid",
             borderwidth=1,
@@ -101,6 +108,7 @@ class MainWindow:
         open_url: Callable[[str], Any] = webbrowser.open,
         monitors: Callable[[], list[Rect]] | None = None,
         cursor_cache: TkCursorCache | None = None,
+        title_bar: Callable[[Any, bool], Any] | None = None,
     ) -> None:
         self.root = root
         self.ctl = controller
@@ -110,6 +118,9 @@ class MainWindow:
         self.open_url = open_url
         self.monitors = monitors
         self.cursor_cache = cursor_cache
+        self.title_bar = title_bar  # (root, dark) -> DWM immersive dark title bar (Windows)
+        self.applied_theme: str | None = None
+        self.style = ttk.Style(root)
         self.placed: tuple[int, int] | None = None
         self._refreshing = False
         self._after_id: str | None = None
@@ -132,10 +143,11 @@ class MainWindow:
         pad = {"pady": 2}
 
         self.start_btn = ttk.Button(
-            f, text=strings.START, command=self.ctl.toggle, default="active"
-        )
+            f, text=strings.START, command=self.ctl.toggle, default="active",
+            style="Accent.TButton",
+        )  # fmt: skip
         self.start_btn.grid(row=0, column=0, sticky="w", **pad)
-        self.hint = ttk.Label(f, foreground="grey")
+        self.hint = ttk.Label(f, style="Hint.TLabel")
         self.hint.grid(row=0, column=1, sticky="e", **pad)
         r.bind("<Return>", lambda e: self._invoke_if_focused(e))
         ttk.Separator(f).grid(row=1, column=0, columnspan=2, sticky="ew", pady=4)
@@ -198,7 +210,7 @@ class MainWindow:
             vf, from_=0, to=100, length=150, command=lambda v: self._slider(self.ctl.set_volume, v)
         )
         self.volume.grid(row=0, column=0)
-        self.volume_label = ttk.Label(vf, width=7)
+        self.volume_label = ttk.Label(vf, width=7, style="Value.TLabel")
         self.volume_label.grid(row=0, column=1, padx=6)
         self._slider_keys(self.volume, 1, 10, self.ctl.set_volume, lambda: self.ctl.settings.volume)
 
@@ -213,7 +225,7 @@ class MainWindow:
             command=lambda v: self._slider(self.ctl.set_note_length, v),
         )
         self.note_length.grid(row=0, column=0)
-        self.note_length_label = ttk.Label(nf, width=7)
+        self.note_length_label = ttk.Label(nf, width=7, style="Value.TLabel")
         self.note_length_label.grid(row=0, column=1, padx=6)
         self._slider_keys(
             self.note_length,
@@ -258,28 +270,145 @@ class MainWindow:
             lambda e: self._pick(self.hotkey, self.ctl.hotkey_options(), self.ctl.set_hotkey),
         )
 
-        ttk.Separator(f).grid(row=11, column=0, columnspan=2, sticky="ew", pady=4)
+        label(11, strings.LABEL_THEME)
+        self.theme = ttk.Combobox(f, state="readonly", width=18)
+        self.theme.grid(row=11, column=1, sticky="w", **pad)
+        self.theme.bind(
+            "<<ComboboxSelected>>",
+            lambda e: self._pick(self.theme, self.ctl.theme_options(), self.ctl.set_theme),
+        )
+        self.theme_tip = Tooltip(self.theme, self.ctl.theme_tooltip)
+        r.bind("<FocusIn>", self._on_focus_in, add="+")
+
+        ttk.Separator(f).grid(row=12, column=0, columnspan=2, sticky="ew", pady=4)
         sf = ttk.Frame(f)
-        sf.grid(row=12, column=0, columnspan=2, sticky="ew")
+        sf.grid(row=13, column=0, columnspan=2, sticky="ew")
         sf.columnconfigure(1, weight=1)
         self.dot = ttk.Label(sf, takefocus=0)
         self.dot.grid(row=0, column=0)
         # No fixed width: wraplength follows the window width (see _fit) so long warnings
         # wrap onto more lines and the window grows instead of truncating.
-        self.status = ttk.Label(sf, justify="left", anchor="w")
+        self.status = ttk.Label(sf, justify="left", anchor="w", style="Status.TLabel")
         self.status.grid(row=0, column=1, sticky="ew", padx=(4, 0))
-        self.help = ttk.Label(
-            sf,
-            text=strings.HELP_LINK,
-            foreground="#2563EB",
-            cursor="hand2",
-            font=("TkDefaultFont", 9, "underline"),
-        )
+        self.help = ttk.Label(sf, text=strings.HELP_LINK, cursor="hand2", style="Link.TLabel")
         self.help.bind("<Button-1>", lambda e: self.open_help())
         self.help_anchor: str | None = None
         self._focused_once = False
         self._fit_key: tuple | None = None
         self.height = 0
+
+    def _on_focus_in(self, event: Any) -> None:
+        if event.widget is self.root:  # backup for a missed WM_SETTINGCHANGE (ux §11.2)
+            self.ctl.request_theme_refresh()
+
+    # -- theme (docs/ux.md §11.4-§11.6) --------------------------------------------------
+
+    def comboboxes(self) -> list[ttk.Combobox]:
+        return [self.scale, self.key, self.low, self.high, self.instruments, self.device,
+                self.hotkey, self.theme]  # fmt: skip
+
+    def apply_theme(self, effective: str) -> None:
+        self.applied_theme = effective
+        if effective == HIGH_CONTRAST:
+            self._apply_high_contrast()
+        else:
+            self._apply_palette(PALETTES[effective])
+        if self.title_bar is not None:
+            self.title_bar(self.root, effective == DARK)
+
+    def _apply_high_contrast(self) -> None:
+        """No palette: native theme and system colours so the user's contrast colours win."""
+        names = self.style.theme_names()
+        self.style.theme_use(next(t for t in ("vista", "winnative", "default") if t in names))
+        Tooltip.bg = None
+        for opt in ("background", "foreground", "selectBackground", "selectForeground"):
+            self.root.option_add(f"*TCombobox*Listbox.{opt}", "")
+        with contextlib.suppress(tk.TclError):
+            self.root.configure(bg="SystemButtonFace")
+        font = ("TkDefaultFont", 9, "underline")
+        for name in ("Hint.TLabel", "Value.TLabel", "Status.TLabel", "Tooltip.TLabel"):
+            self.style.configure(name, foreground="", background="")
+        self.style.configure("Link.TLabel", foreground="", background="", font=font)
+
+    def _apply_palette(self, p: dict[str, str]) -> None:
+        st = self.style
+        st.theme_use("clam")
+        self.root.configure(bg=p["bg"])
+        Tooltip.bg = p["surface"]
+        st.configure(
+            ".", background=p["bg"], foreground=p["text"], bordercolor=p["border"],
+            focuscolor=p["focus"], troughcolor=p["track"], selectbackground=p["select_bg"],
+            selectforeground=p["select_fg"], insertcolor=p["text"],
+        )  # fmt: skip
+        st.map(".", foreground=[("disabled", p["disabled_text"])])
+        for name in ("TFrame", "TLabel", "Status.TLabel"):
+            st.configure(name, background=p["bg"], foreground=p["text"])
+        for name in ("Hint.TLabel", "Value.TLabel"):
+            st.configure(name, background=p["bg"], foreground=p["text_secondary"])
+        st.configure("Link.TLabel", background=p["bg"], foreground=p["link"],
+                     font=("TkDefaultFont", 9, "underline"))  # fmt: skip
+        st.configure("Tooltip.TLabel", background=p["surface"], foreground=p["text"],
+                     bordercolor=p["border"])  # fmt: skip
+        surf = p["surface"]
+        st.configure("TButton", background=surf, foreground=p["text"],
+                     bordercolor=p["border"], lightcolor=surf, darkcolor=surf)  # fmt: skip
+        st.map(
+            "TButton",
+            background=[("disabled", p["disabled_surface"]), ("pressed", p["border"]),
+                        ("active", p["surface_hover"])],
+            foreground=[("disabled", p["disabled_text"])],
+            bordercolor=[("focus", p["focus"])],
+        )  # fmt: skip
+        st.configure("Accent.TButton", background=p["accent"], foreground=p["on_accent"],
+                     lightcolor=p["accent"], darkcolor=p["accent"])  # fmt: skip
+        st.map(
+            "Accent.TButton",
+            background=[("disabled", p["disabled_surface"]), ("active", p["accent_hover"])],
+            foreground=[("disabled", p["disabled_text"])],
+            bordercolor=[("focus", p["focus"])],
+        )  # fmt: skip
+        st.configure(
+            "TCombobox", fieldbackground=p["surface"], background=p["surface"],
+            foreground=p["text"], arrowcolor=p["text"], bordercolor=p["border"],
+            lightcolor=p["surface"], darkcolor=p["surface"],
+        )  # fmt: skip
+        st.map(
+            "TCombobox",
+            fieldbackground=[("disabled", p["disabled_surface"]), ("readonly", p["surface"])],
+            foreground=[("disabled", p["disabled_text"])],
+            arrowcolor=[("disabled", p["disabled_text"])],
+            bordercolor=[("focus", p["focus"])],
+            selectbackground=[("readonly", p["surface"])],
+            selectforeground=[("readonly", p["text"])],
+        )  # fmt: skip
+        st.configure(
+            "TCheckbutton", background=p["bg"], foreground=p["text"],
+            indicatorbackground=p["surface"], indicatorforeground=p["on_accent"],
+            upperbordercolor=p["border"], lowerbordercolor=p["border"],
+        )  # fmt: skip
+        st.map(
+            "TCheckbutton",
+            indicatorbackground=[("selected", p["accent"])],
+            background=[("active", p["bg"])],
+            foreground=[("disabled", p["disabled_text"])],
+        )  # fmt: skip
+        th = p["thumb"]
+        st.configure("Horizontal.TScale", troughcolor=p["track"], background=th,
+                     bordercolor=p["track"], lightcolor=th, darkcolor=th)  # fmt: skip
+        st.map("Horizontal.TScale",
+               background=[("disabled", p["disabled_text"]), ("active", p["focus"])])  # fmt: skip
+        st.configure("Vertical.TScrollbar", background=p["surface"], troughcolor=p["bg"],
+                     arrowcolor=p["text"])  # fmt: skip
+        st.configure("TSeparator", background=p["border"])
+        lb = {"background": p["surface"], "foreground": p["text"],
+              "selectBackground": p["select_bg"], "selectForeground": p["select_fg"]}  # fmt: skip
+        for opt, val in lb.items():
+            self.root.option_add(f"*TCombobox*Listbox.{opt}", val)
+        for combo in self.comboboxes():  # option_add only affects new widgets: re-skin popdowns
+            with contextlib.suppress(tk.TclError):
+                pd = self.root.tk.call("ttk::combobox::PopdownWindow", combo)
+                args = [x for k, v in lb.items() for x in (f"-{k.lower()}", v)]
+                self.root.tk.call(f"{pd}.f.l", "configure", *args)
 
     def close(self, *, balloon: bool = True) -> None:
         """✕ / Esc: hide to tray (§2.1). Without a tray (non-Windows dev runs) there would be
@@ -401,7 +530,15 @@ class MainWindow:
         self._set_combo(self.device, opts, c.selected_device)
         self.device.state(["!disabled"] if c.devices else ["disabled"])
         status = st.current(c.clock())
-        self.dot.configure(text=status.dot, foreground=status.color)
+        if c.effective_theme != self.applied_theme:
+            self.apply_theme(c.effective_theme)
+        self._set_combo(self.theme, c.theme_options(), s.theme)
+        try:
+            self.dot.configure(
+                text=status.dot, foreground=role_color(c.effective_theme, status.role)
+            )
+        except tk.TclError:  # system colour names (high contrast) exist only on Windows Tk
+            self.dot.configure(text=status.dot, foreground="")
         self.status.configure(text=status.text)
         self.help_anchor = status.help_anchor
         if status.help_anchor:
@@ -440,6 +577,9 @@ class MainWindow:
         self.root.deiconify()
         self.root.lift()
         self.root.focus_force()
+        if not self._focused_once and self.title_bar is not None and self.applied_theme:
+            # The frame window may only exist once mapped: set the title bar again (ux §11.3).
+            self.title_bar(self.root, self.applied_theme == DARK)
         if not self._focused_once:  # ux §1.1: Start has focus when the window first opens
             self._focused_once = True
             self.start_btn.focus_set()

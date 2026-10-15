@@ -425,3 +425,41 @@ def test_no_view_is_safe():
     ctl.show_window()
     ctl.handle_event(Event("error", {"error": DeviceLostError("x")}))
     ctl.quit()
+
+
+def test_theme_options_resolution_and_coalescing():
+    probes = [(False, False)]
+    ctl, _e, s, v, c, _ = make(theme_probe=lambda: probes[-1])
+    assert ctl.effective_theme == "dark"
+    assert [o.label for o in ctl.theme_options()] == ["System (Dark)", "Light", "Dark"]
+    assert ctl.theme_tooltip() == strings.THEME_TOOLTIP
+    ctl.set_theme("light")
+    assert ctl.effective_theme == "light" and s.saved[-1].theme == "light"
+    n = len(v.calls)
+    ctl.set_theme("light")  # unchanged
+    assert len(v.calls) == n
+    ctl.set_theme("system")
+    # Windows switches to light + high contrast: first request applies immediately...
+    probes.append((True, True))
+    c.t = 10.0
+    ctl.dispatch(("theme_changed", None))
+    assert ctl.effective_theme == "high_contrast"
+    assert ctl.theme_tooltip() == strings.THEME_TOOLTIP_HC
+    assert ctl.theme_options()[0].label == "System (Light)"
+    # ...a burst within 250 ms is coalesced into one later probe on tick
+    probes.append((True, False))
+    c.t = 10.1
+    ctl.request_theme_refresh()
+    assert ctl.high_contrast  # not yet re-read
+    c.t = 10.3
+    ctl.tick()
+    assert ctl.effective_theme == "light"
+    c.t = 11.0
+    ctl.tick()  # nothing pending: no probe
+    ctl.request_theme_refresh()  # same values: no change
+
+
+def test_theme_default_probe():
+    ctl, *_ = make()
+    assert (ctl.apps_light, ctl.high_contrast) == (None, False)
+    assert ctl.effective_theme == "light"

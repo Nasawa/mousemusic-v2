@@ -56,3 +56,51 @@ def test_message_window_translates_posted_messages():
     w.stop()
     w.join(5)
     assert not w.is_alive()
+
+
+def _wait(pred, seconds=5.0):
+    end = threading.Event()
+    for _ in range(int(seconds * 20)):
+        if pred():
+            return True
+        end.wait(0.05)
+    return pred()
+
+
+@pytest.mark.parametrize("setting", ["Off", "Ctrl+Alt+Shift+M"])
+def test_a2_message_window_exists_without_hotkey(setting):
+    """ARCHITECTURE A-2: the hidden message window and its thread exist even when the
+    shortcut is Off or fails to register, so power/session/theme broadcasts still arrive."""
+    import ctypes
+    from ctypes import wintypes
+
+    from mousemusic.platform import hotkey as hk
+    from mousemusic.platform.win_hotkey import MessageWindow
+
+    holder = None
+    if setting != "Off":  # make registration fail: another window holds the only candidate
+        holder = MessageWindow(setting, lambda c: None)
+        holder.start_and_wait()
+    got = []
+    w = MessageWindow(setting, got.append)
+    active = w.start_and_wait()
+    try:
+        if setting == "Off" or (holder is not None and holder.active is not None):
+            assert active is None
+        assert w.hwnd and w.is_alive()
+        user32 = ctypes.WinDLL("user32")
+        user32.PostMessageW.argtypes = [
+            wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM,
+        ]  # fmt: skip
+        name = ctypes.create_unicode_buffer("ImmersiveColorSet")
+        user32.PostMessageW(w.hwnd, hk.WM_POWERBROADCAST, hk.PBT_APMRESUMESUSPEND, 0)
+        user32.PostMessageW(w.hwnd, hk.WM_SETTINGCHANGE, hk.SPI_SETHIGHCONTRAST, 0)
+        user32.PostMessageW(w.hwnd, hk.WM_SETTINGCHANGE, 0, ctypes.addressof(name))
+        assert _wait(lambda: len(got) >= 3), got
+        assert got[:3] == ["resume", "theme_changed", "theme_changed"]
+    finally:
+        w.stop()
+        w.join(5)
+        if holder is not None:
+            holder.stop()
+            holder.join(5)
