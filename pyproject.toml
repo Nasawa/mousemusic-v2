@@ -9,7 +9,7 @@ description = "Cursor position drives MIDI output: X -> pitch, Y -> instrument."
 readme = "ARCHITECTURE.md"
 license = { file = "LICENSE" }
 requires-python = ">=3.12,<3.13"
-dependencies = ["pystray", "Pillow"]  # exact pins live in requirements.txt
+dependencies = ["pystray", "Pillow", "comtypes; sys_platform == 'win32'"]  # exact pins live in requirements.txt
 
 [project.scripts]
 mousemusic = "mousemusic.__main__:main"

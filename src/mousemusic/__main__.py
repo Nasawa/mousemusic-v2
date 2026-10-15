@@ -48,6 +48,7 @@ def build_parser() -> argparse.ArgumentParser:
 def self_test(backend_factory: Callable[[], MidiOut] | None = None, out=print) -> int:
     """``--self-test`` (§11): no GUI. Settings round-trip in a temp folder, the mapping for
     every instrument set x scale, and MIDI enumeration (0 devices is fine). Exit 0 = pass."""
+    import sys
     import tempfile
     from dataclasses import replace
     from pathlib import Path
@@ -98,10 +99,25 @@ def self_test(backend_factory: Callable[[], MidiOut] | None = None, out=print) -
             icon = assets_dir() / "icons" / f"tray-{state}.ico"
             assert icon.is_file(), f"missing {icon}"
 
+    def taskbar() -> None:
+        # CG-S2: geometry + UI Automation slot rects (never fails for "no taskbar").
+        from mousemusic.platform import win_taskbar, win_taskbar_uia
+        from mousemusic.taskbar import Scanner
+
+        reader = win_taskbar_uia.make_reader() if sys.platform == "win32" else None
+        snap = Scanner(win_taskbar.find_taskbars, reader).scan()
+        for line in snap.describe():
+            out(f"     {line}")
+        for z in snap.zones:
+            apps = " ".join(f"{a}-{b}" for a, b in z.app_slots)
+            tray = " ".join(f"{a}-{b}" for a, b in z.tray_slots)
+            out(f"     taskbar {z.monitor} slots: apps [{apps}] tray [{tray}]")
+
     check("bundle", bundle)
     check("settings", settings_round_trip)
     check("mapping", mapping)
     check("midi", midi)
+    check("taskbar", taskbar)
     return 1 if failures else 0
 
 
