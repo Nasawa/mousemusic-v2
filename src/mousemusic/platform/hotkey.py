@@ -44,7 +44,8 @@ def _vk(key: str) -> int | None:
 def parse_hotkey(text: object) -> Hotkey | None:
     """``"Ctrl+Alt+M"`` → :class:`Hotkey`. Modifiers Ctrl/Alt/Shift/Win (any order, case-
     insensitive, each at most once, at least one) plus exactly one A-Z, 0-9 or F1-F12 key.
-    Anything else → None (W4; the default is *not* substituted, §11 OQ-5)."""
+    Anything else → None. In settings.json an invalid value resets to the default with W3
+    (see :func:`normalize_setting` and ``config._hotkey``, §11 OQ-5 revised)."""
     if not isinstance(text, str):
         return None
     parts = [p.strip().upper() for p in text.split("+")]
