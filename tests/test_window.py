@@ -93,7 +93,7 @@ def test_tab_order_follows_ux(root):
 
     chain = list(walk(root))
     expected = [w.start_btn, w.scale, w.key, w.low, w.high, w.instruments, w.volume,
-                w.note_length, w.legato, w.device, w.reconnect]  # fmt: skip
+                w.note_length, w.legato, w.device, w.reconnect, w.hotkey]  # fmt: skip
     assert chain == expected
 
 
@@ -267,3 +267,32 @@ def test_window_monitor_enumeration_failure_falls_back(root):
 
     w, *_ = build(root, settings=DEFAULTS.replace(window_x=10, window_y=10), monitors=boom)
     assert w.placed == (10, 10)
+
+
+def test_long_warning_wraps_and_window_grows(root):
+    w, ctl, *_ = build(root, settings=DEFAULTS.replace(first_run_done=True))
+    base = w.height
+    width, _ = w.size()
+    ctl.status.add_warning("W4", strings.W4_HOTKEYS_OFF.format(
+        hotkey="Ctrl+Alt+M", fallback="Ctrl+Alt+Shift+M"), 0, duration=None)  # fmt: skip
+    w.refresh()
+    root.update_idletasks()
+    wrap = int(str(w.status.cget("wraplength")))
+    assert 0 < wrap <= width
+    assert w.status.winfo_reqwidth() <= wrap + 2  # text wrapped, not clipped at the edge
+    assert w.height >= root.winfo_reqheight()  # everything fits vertically
+    assert w.height >= base
+    # back to a short status: shrinks to the minimum again
+    ctl.status.clear_warning("W4")
+    w.refresh()
+    assert w.height == max(w.size()[1], root.winfo_reqheight())
+
+
+def test_hotkey_picker(root):
+    w, ctl, *_ = build(root)
+    labels = list(w.hotkey.cget("values"))
+    assert labels[0] == "Ctrl+Alt+M" and labels[-1] == "Off"
+    w.hotkey.current(labels.index("Ctrl+Alt+P"))
+    w.hotkey.event_generate("<<ComboboxSelected>>")
+    root.update()
+    assert ctl.settings.hotkey == "Ctrl+Alt+P"

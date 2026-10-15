@@ -159,14 +159,16 @@ def _optional_int(raw: Mapping[str, Any], key: str, issues: _Issues) -> int | No
 
 
 def _hotkey(raw: Mapping[str, Any], issues: _Issues) -> str:
-    """Kept verbatim if it is a string: parsing happens where the hotkey is registered, and an
-    unparsable value disables the shortcut with W4 instead of silently using the default
-    (ARCHITECTURE.md §11 OQ-5)."""
+    """Normalised to e.g. ``Ctrl+Alt+M`` (any modifier order/case accepted) or ``Off``.
+    Unparsable values fall back to the default like any other invalid setting (W3)."""
+    from mousemusic.platform.hotkey import normalize_setting
+
     value = raw.get("hotkey", DEFAULTS.hotkey)
-    if not isinstance(value, str):
+    norm = normalize_setting(value)
+    if norm is None:
         issues.add("hotkey", value, DEFAULTS.hotkey)
         return DEFAULTS.hotkey
-    return value
+    return norm
 
 
 def _note_range(low: int, high: int, issues: _Issues) -> tuple[int, int]:

@@ -37,33 +37,35 @@ Design principles:
 │  Note length  [━━━━●━━━━━━━━━━━]  250 ms        │   row 6
 │               [ ] Hold notes (legato)           │   row 7
 │  MIDI output  [ Microsoft GS Wavetable ▾ ] [⟳]  │   row 8  device + Reconnect
+│     Shortcut  [ Ctrl+Alt+M         ▾ ]          │   row 8c global shortcut
 │ ─────────────────────────────────────────────── │
-│  ● Stopped — press Start or Ctrl+Alt+M          │   row 9  status line
+│  ● Stopped — press Start or Ctrl+Alt+M          │   row 9  status line (wraps)
 └─────────────────────────────────────────────────┘
 ```
 
 Tab order is top to bottom, left to right: Start → Scale → Key → Low → High → Instruments → Volume → Note length →
-Hold notes → MIDI output → Reconnect. Start has focus when the window opens.
+Hold notes → MIDI output → Reconnect → Shortcut. Start has focus when the window opens.
 
 ### 1.2 Controls
 
 | # | Label (exact) | Widget | Values / range | Default | Setting key | Behaviour |
 |---|---|---|---|---|---|---|
-| 0 | `▶  Start` / `■  Stop` | ttk.Button, default button (Enter / Space) | toggle | `▶  Start` | — (not persisted; `start_on_launch` is file-only) | Posts `start`/`stop` to the engine. The label flips **only after** the engine confirms (so if the open fails, it stays `▶  Start`). Hint text `Ctrl+Alt+M` in grey to the right (shows the current `hotkey` value) |
+| 0 | `▶  Start` / `■  Stop` | ttk.Button, default button (Enter / Space) | toggle | `▶  Start` | — (not persisted; `start_on_launch` is file-only) | Posts `start`/`stop` to the engine. The label flips **only after** the engine confirms (so if the open fails, it stays `▶  Start`). Hint text `Ctrl+Alt+M` in grey to the right (shows the shortcut that is **actually active**, which may be the fallback `Ctrl+Alt+Shift+M`; `(shortcut off)` when none) |
 | 1 | `Scale` | readonly Combobox | `Chromatic`, `Major`, `Minor`, `Pentatonic major`, `Pentatonic minor`, `Blues` | `Pentatonic major` | `scale` | Applies live while playing |
 | 2 | `Key` | readonly Combobox, narrow | `C`, `C♯`, `D`, `E♭`, `E`, `F`, `F♯`, `G`, `A♭`, `A`, `B♭`, `B` | `C` | `root` | Applies live. Disabled (greyed) when Scale = Chromatic, since key has no effect there |
 | 3 | `Pitch range` | two readonly Comboboxes + the word `to` | octaves `C0`…`C8` (MIDI 12…108), step 12 | `C2` to `C7` (36–96) | `low_note`, `high_note` | If the user picks low ≥ high, the other box moves so the range is at least one octave (no error). Only octave Cs are offered in the UI. A non-C value from the file shows its note name, e.g. `G2`, as an extra item |
-| 4 | `Instruments` | readonly Combobox | `Classic (8)`, `Mellow (6)`, `Percussive (7)`, `Piano only (1)`, `All 128 GM (128)` | `Classic (8)` | `instrument_set` | The number is the row count, i.e. how many bands the screen is split into top to bottom. Tooltip on hover: `Top of the screen to bottom: <names>` |
+| 4 | `Instruments` | readonly Combobox | `Classic (8)`, `Mellow (6)`, `Percussive (7)`, `Piano only (1)`, `Full GM library (128)` | `Classic (8)` | `instrument_set` | The number is the row count, i.e. how many bands the screen is split into top to bottom. Tooltip on hover: `Top of the screen to bottom: <names>` |
 | 5 | `Volume` | ttk.Scale + value label | 0–100 %, step 1 | 80 % | `volume` | Label `80 %`. Sent as CC7 Channel Volume (`round(volume*127/100)`) on open, on Start and on every change. Live. `velocity` (default 100) is file-only |
 | 6 | `Note length` | ttk.Scale + value label | 50–2000 ms, step 10 | 250 ms | `note_length_ms` | Label `250 ms`. **Disabled** when Hold notes is checked |
 | 7 | `Hold notes (legato)` | ttk.Checkbutton | on/off | off | `legato` | When on, a note holds until the cursor enters the next cell or until Stop |
 | 8 | `MIDI output` | readonly Combobox, ellipsized at ~24 chars, full name in tooltip | WinMM device names | `Microsoft GS Wavetable Synth` | `midi_device` | **Re-enumerates every time the dropdown opens** (§9). Choosing a device while playing silences, closes and reopens (engine `set_device`). If the list is empty the combobox shows `No MIDI output found` and is disabled |
 | 8b | `⟳` (tooltip `Reconnect`) | small ttk.Button | — | — | — | Closes and reopens the selected device. Use it after unplugging headphones etc. Status: `Reconnecting…` then the normal status |
-| 9 | status line | ttk.Label, single line, ellipsized | see §1.3 | — | — | Coloured dot + text. Errors stay until resolved. They are never auto-dismissed |
+| 8c | `Shortcut` | readonly Combobox | `Ctrl+Alt+M`, `Ctrl+Alt+Shift+M`, `Ctrl+Alt+P`, `Ctrl+Alt+F9`, `Off` (a custom value from the file is listed first) | `Ctrl+Alt+M` | `hotkey` | Re-registers live on change. If the chosen key is taken, `Ctrl+Alt+Shift+M` is tried as a fallback (W7); if both fail, W4 |
+| 9 | status line | ttk.Label, **wraps** to the window width | see §1.3 | — | — | Coloured dot + text. Never truncated: long messages wrap onto more lines and the window grows taller to fit (shrinking back afterwards). Errors stay until resolved. They are never auto-dismissed |
 
 All settings save automatically (debounced 500 ms, per §4). There is **no Save, Apply, or OK button.**
 
-Not in the UI by design (file-only, per §4/§5/§11): `velocity`, `poll_hz`, `screen_mode`, `start_on_launch`, `hotkey`, hysteresis.
+Not in the UI by design (file-only, per §4/§5/§11): `velocity`, `poll_hz`, `screen_mode`, `start_on_launch`, hysteresis. `hotkey` is also editable in the file: modifiers Ctrl/Alt/Shift/Win in any order plus A–Z, 0–9 or F1–F12 (e.g. `Ctrl+Alt+M`), or `Off`; it is normalised (`alt+ctrl+m` → `Ctrl+Alt+M`) and an invalid value resets to `Ctrl+Alt+M` (W3).
 
 ### 1.3 Status line
 
@@ -101,8 +103,9 @@ Tray icon per state (P2, `assets/icons/`): Stopped → `tray-idle.ico`, Playing 
 - Icon: `assets/icon.ico`. Two variants (P2 delivers both): **idle** (normal) and **playing** (with a small green dot
   or note badge), so state shows at a glance. Until P2 lands, Sprite uses one icon.
 - Tooltip (hover), exact:
-  - Stopped: `MouseMusic vX.Y.Z — Stopped`
-  - Playing: `MouseMusic vX.Y.Z — Playing`
+  - Stopped: `MouseMusic vX.Y.Z — Stopped · Ctrl+Alt+M`
+  - Playing: `MouseMusic vX.Y.Z — Playing · Ctrl+Alt+M`
+  (` · <shortcut>` names the active shortcut and is omitted when the shortcut is off.)
   - Error: `MouseMusic vX.Y.Z — No sound (click for details)`
   (Windows caps tooltips at 127 chars. These are well under.)
 - **Left-click (default action):** Show window. (pystray `default=True` on "Show window".)
@@ -188,7 +191,8 @@ README anchors (P4 must create them): `#no-sound`, `#no-midi-device`, `#device-b
 | **W1** | Saved `midi_device` not found at startup or after re-enumeration. Falls back to device 0 (§9) | `"<saved device>" not found. Using <device 0> instead.` | Auto-selected. Clears on the next Start or on the user picking any device. The fallback is never written to `midi_device`. Only an explicit user pick writes it. W1 shows on each launch while the saved device is missing. Start/⟳ re-enumerate and reopen the saved device by name if it has come back (§11 UX-Q4, OQ-12) |
 | **W2** | Settings file corrupt → renamed `settings.json.bak`, defaults loaded (§4) | `Your settings file couldn't be read, so defaults were restored. The old file was saved as settings.json.bak.` | Shown at startup until the first Start or 15 s, whichever is later. Help → `#settings-reset` |
 | **W3** | Some settings values invalid → clamped or reset (§4) | `Some settings were out of range and have been reset.` | Same dismissal as W2. Details go in the log |
-| **W4** | Global hotkey taken: `RegisterHotKey` fails (another app owns Ctrl+Alt+M) or the `hotkey` string won't parse | `Ctrl+Alt+M is in use by another app, so the shortcut is off. Use the Start button.` | The hint next to Start changes to `(shortcut off)` in grey. App works normally otherwise. Clears after 15 s. The hint stays |
+| **W4** | Global shortcut unavailable: `RegisterHotKey` fails for the configured shortcut **and** the `Ctrl+Alt+Shift+M` fallback | `Ctrl+Alt+M and Ctrl+Alt+Shift+M are in use by other apps, so the shortcut is off. Use the Start button.` (if the configured key *is* the fallback: `Ctrl+Alt+Shift+M is in use by another app, so the shortcut is off. Use the Start button.`) | The hint next to Start changes to `(shortcut off)` in grey. App works normally otherwise. Clears after 15 s. The hint stays. Not shown when Shortcut = `Off` |
+| **W7** | Configured shortcut taken, fallback `Ctrl+Alt+Shift+M` registered | `Ctrl+Alt+M is in use by another app, so the shortcut is Ctrl+Alt+Shift+M instead.` | Clears after 15 s. The hint, stopped status and tray tooltip show the active shortcut |
 | **W5** | Settings can't be saved (APPDATA read-only, disk full, portable exe on a read-only stick) | `Settings can't be saved right now. Changes will last until you quit.` | Show once per session. Retry on the next change. Log the path and the OS error |
 | **W6** | Audio endpoint changed (headphones unplugged) and the GS synth may go silent. Not detectable by WinMM, so this is **not an automatic message**. It's covered by the ⟳ tooltip and README `#no-sound` | — | ⟳ Reconnect |
 
@@ -211,7 +215,7 @@ When the error clears, show the next pending warning, if any, then the normal st
 
 | Key | Scope | Action |
 |---|---|---|
-| `Ctrl+Alt+M` | **Global** (`RegisterHotKey`) | Toggle Start/Stop, even when the window is hidden |
+| `Ctrl+Alt+M` (configurable, fallback `Ctrl+Alt+Shift+M`) | **Global** (`RegisterHotKey`) | Toggle Start/Stop, even when the window is hidden |
 | `Space` / `Enter` | Window, Start focused | Toggle |
 | `Tab` / `Shift+Tab` | Window | Move focus (order in §1.1) |
 | `Alt+↓` or `F4` | Combobox | Open the list (standard ttk) |

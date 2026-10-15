@@ -139,8 +139,65 @@ def test_startup_w2_w3_w4():
     assert text(ctl2) == strings.W3_SETTINGS_CLAMPED
     ctl2.status.clear_warning("W3")
     assert text(ctl2) == (
-        "Ctrl+Alt+M is in use by another app, so the shortcut is off. Use the Start button."
+        "Ctrl+Alt+M and Ctrl+Alt+Shift+M are in use by other apps, so the shortcut is off. "
+        "Use the Start button."
     )
+
+
+def test_startup_w4_single_when_fallback_is_configured():
+    ctl, *_ = make(DEFAULTS.replace(hotkey="Ctrl+Alt+Shift+M"), hotkey_ok=False)
+    ctl.startup()
+    assert text(ctl) == (
+        "Ctrl+Alt+Shift+M is in use by another app, so the shortcut is off. Use the Start button."
+    )
+
+
+def test_startup_fallback_active_shows_w6_and_active_shortcut():
+    ctl, *_ = make(DEFAULTS.replace(first_run_done=True), hotkey_active="Ctrl+Alt+Shift+M")
+    ctl.startup()
+    assert (
+        text(ctl)
+        == "Ctrl+Alt+M is in use by another app, so the shortcut is Ctrl+Alt+Shift+M instead."
+    )
+    assert ctl.status.hotkey_hint() == "Ctrl+Alt+Shift+M"
+    assert ctl.status.tray_tooltip("1") == "MouseMusic v1 — Stopped · Ctrl+Alt+Shift+M"
+    ctl.status.clear_warning("W7")
+    assert text(ctl) == "Stopped — press Start or Ctrl+Alt+Shift+M"
+
+
+def test_hotkey_off_no_warning():
+    ctl, *_ = make(DEFAULTS.replace(hotkey="Off", first_run_done=True))
+    ctl.startup()
+    assert text(ctl) == "Stopped — press Start"
+    assert ctl.status.hotkey_hint() == strings.SHORTCUT_OFF
+
+
+def test_set_hotkey_live_reregisters_and_handles_result():
+    reg = []
+    ctl, _e, s, _v, *_ = make(DEFAULTS.replace(first_run_done=True), hotkey_registrar=reg.append)
+    ctl.startup()
+    assert [o.value for o in ctl.hotkey_options()][-1] == "Off"
+    ctl.set_hotkey("Ctrl+Alt+P")
+    assert reg == ["Ctrl+Alt+P"] and s.saved[-1].hotkey == "Ctrl+Alt+P"
+    ctl.set_hotkey("Ctrl+Alt+P")  # unchanged -> no re-register
+    ctl.set_hotkey("Banana")  # invalid -> ignored
+    assert reg == ["Ctrl+Alt+P"]
+    ctl.dispatch(("hotkey", "Ctrl+Alt+Shift+M"))
+    assert "so the shortcut is Ctrl+Alt+Shift+M instead" in text(ctl)
+    ctl.dispatch(("hotkey", "Ctrl+Alt+P"))
+    assert text(ctl) == "Stopped — press Start or Ctrl+Alt+P"
+    ctl.dispatch(("hotkey", None))
+    assert "Ctrl+Alt+P and Ctrl+Alt+Shift+M are in use" in text(ctl)
+    ctl.set_hotkey("off")
+    ctl.dispatch(("hotkey", None))
+    assert text(ctl) == "Stopped — press Start"
+
+
+def test_set_hotkey_without_registrar_and_custom_option():
+    ctl, *_ = make(DEFAULTS.replace(hotkey="Win+F9", first_run_done=True))
+    assert ctl.hotkey_options()[0].value == "Win+F9"
+    ctl.set_hotkey("Ctrl+Alt+P")
+    assert not ctl.status.hotkey_ok
 
 
 def test_start_on_launch():
@@ -272,7 +329,7 @@ def test_instruments():
     ctl, *_ = make()
     labels = [o.label for o in ctl.instrument_options()]
     assert labels == ["Classic (8)", "Mellow (6)", "Percussive (7)", "Piano only (1)",
-                      "All 128 GM (128)"]  # fmt: skip
+                      "Full GM library (128)"]  # fmt: skip
     assert ctl.instrument_tooltip().startswith("Top of the screen to bottom: Acoustic Grand Piano")
     assert ctl.instrument_tooltip("nope") == "Top of the screen to bottom: "
     ctl.set_instrument_set("mellow")

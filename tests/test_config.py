@@ -158,6 +158,8 @@ def test_out_of_range_clamped(tmp_path, key, value, expected, caplog):
         ("midi_device", ""),
         ("midi_device", 7),
         ("hotkey", 5),
+        ("hotkey", "Banana+Q"),
+        ("hotkey", "Ctrl+Ctrl+M"),
         ("window_x", "left"),
         ("window_y", False),
     ],
@@ -192,8 +194,20 @@ def test_note_range_rule_oq8(low, high, expected):
     assert bool(issues) == ((low, high) != expected)
 
 
-def test_hotkey_kept_verbatim_even_if_unparsable():
-    assert validate({"hotkey": "Banana+Q"}) == (Settings(hotkey="Banana+Q"), [])
+@pytest.mark.parametrize(
+    ("value", "want"),
+    [
+        ("Ctrl+Alt+M", "Ctrl+Alt+M"),
+        ("alt + ctrl + m", "Ctrl+Alt+M"),
+        ("shift+alt+ctrl+m", "Ctrl+Alt+Shift+M"),
+        ("Win+F9", "Win+F9"),
+        ("off", "Off"),
+        ("", "Off"),
+        ("None", "Off"),
+    ],
+)
+def test_hotkey_normalised(value, want):
+    assert validate({"hotkey": value}) == (Settings(hotkey=want), [])
 
 
 def test_valid_file_has_no_issues():

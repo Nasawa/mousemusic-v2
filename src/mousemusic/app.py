@@ -22,7 +22,6 @@ from mousemusic import engine as eng
 from mousemusic.logs import log_dir, setup_logging
 from mousemusic.midi import MidiOut, default_backend
 from mousemusic.midi.fake import FakeMidiOut
-from mousemusic.platform.hotkey import parse_hotkey
 from mousemusic.platform.single_instance import SingleInstance
 from mousemusic.ui import strings
 from mousemusic.ui.controller import AppController
@@ -150,17 +149,18 @@ def _run_app(opts: Options, instance: Any) -> int:
     # Signal handlers must be installed from the main thread (§6); they only post to the UI.
     eng.install_exit_handlers(engine, on_signal=lambda: post(("quit", None)))
 
-    hotkey_ok, message_window = False, None
+    hotkey_active, message_window = None, None
     if sys.platform == "win32":  # pragma: no cover - Windows only
         from mousemusic.platform.win_hotkey import MessageWindow
 
         message_window = MessageWindow(
-            parse_hotkey(settings.hotkey),
+            settings.hotkey,
             lambda cmd: post((cmd, None)),
+            on_hotkey=lambda active: post(("hotkey", active)),
             show_message=instance.show_message,
             on_session_end=engine.shutdown,
         )
-        hotkey_ok = message_window.start_and_wait()
+        hotkey_active = message_window.start_and_wait()
 
     tray = None
     if sys.platform == "win32":  # pragma: no cover - Windows only
@@ -172,7 +172,9 @@ def _run_app(opts: Options, instance: Any) -> int:
 
     controller = AppController(
         settings, engine, saver, backend.list_devices, time.monotonic,
-        hotkey_ok=hotkey_ok and bool(settings.hotkey), first_run=not loaded.existed,
+        hotkey_ok=hotkey_active is not None, hotkey_active=hotkey_active,
+        hotkey_registrar=message_window.reregister if message_window else None,
+        first_run=not loaded.existed,
     )  # fmt: skip
     window = MainWindow(
         root, controller, ui_queue=ui_queue, tray=tray, version=__version__,

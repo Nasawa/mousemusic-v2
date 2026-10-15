@@ -36,6 +36,11 @@ W2_SETTINGS_RESET = (
 W2_HELP = ANCHOR_SETTINGS_RESET
 W3_SETTINGS_CLAMPED = "Some settings were out of range and have been reset."
 W4_HOTKEY_OFF = "{hotkey} is in use by another app, so the shortcut is off. Use the Start button."
+W4_HOTKEYS_OFF = (
+    "{hotkey} and {fallback} are in use by other apps, so the shortcut is off. "
+    "Use the Start button."
+)
+W7_HOTKEY_FALLBACK = "{hotkey} is in use by another app, so the shortcut is {active} instead."
 W5_CANT_SAVE = "Settings can't be saved right now. Changes will last until you quit."
 
 # Fatal (F1, Windows MessageBox before the window exists)
@@ -59,6 +64,7 @@ LABEL_VOLUME = "Volume"
 LABEL_NOTE_LENGTH = "Note length"
 LABEL_LEGATO = "Hold notes (legato)"
 LABEL_MIDI = "MIDI output"
+LABEL_HOTKEY = "Shortcut"
 RECONNECT_BUTTON = "⟳"
 RECONNECT_TOOLTIP = "Reconnect"
 INSTRUMENTS_TOOLTIP = "Top of the screen to bottom: {names}"
@@ -82,6 +88,7 @@ DOT_ERROR = "■"
 # Tray (docs/ux.md §2)
 TRAY_TOOLTIP_STOPPED = "MouseMusic v{version} — Stopped"
 TRAY_TOOLTIP_PLAYING = "MouseMusic v{version} — Playing"
+TRAY_TOOLTIP_SHORTCUT = " · {hotkey}"  # appended to Stopped/Playing when a shortcut is active
 TRAY_TOOLTIP_ERROR = "MouseMusic v{version} — No sound (click for details)"
 TRAY_START = "Start"
 TRAY_STOP = "Stop"

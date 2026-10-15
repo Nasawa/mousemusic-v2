@@ -22,7 +22,7 @@ from mousemusic.ui.placement import place_window
 
 log = logging.getLogger(__name__)
 
-WIDTH, HEIGHT = 340, 300  # logical px at 100 % (docs/ux.md §1)
+WIDTH, HEIGHT = 340, 330  # logical px at 100 %; minimum height, grows to fit (ux §1)
 DRAIN_MS = 50
 
 
@@ -250,13 +250,24 @@ class MainWindow:
         self.reconnect.grid(row=0, column=1, padx=(4, 0))
         Tooltip(self.reconnect, strings.RECONNECT_TOOLTIP)
 
-        ttk.Separator(f).grid(row=10, column=0, columnspan=2, sticky="ew", pady=4)
+        label(10, strings.LABEL_HOTKEY)
+        self.hotkey = ttk.Combobox(f, state="readonly", width=18)
+        self.hotkey.grid(row=10, column=1, sticky="w", **pad)
+        self.hotkey.bind(
+            "<<ComboboxSelected>>",
+            lambda e: self._pick(self.hotkey, self.ctl.hotkey_options(), self.ctl.set_hotkey),
+        )
+
+        ttk.Separator(f).grid(row=11, column=0, columnspan=2, sticky="ew", pady=4)
         sf = ttk.Frame(f)
-        sf.grid(row=11, column=0, columnspan=2, sticky="ew")
+        sf.grid(row=12, column=0, columnspan=2, sticky="ew")
+        sf.columnconfigure(1, weight=1)
         self.dot = ttk.Label(sf, takefocus=0)
         self.dot.grid(row=0, column=0)
-        self.status = ttk.Label(sf, width=40, wraplength=310)
-        self.status.grid(row=0, column=1, sticky="w", padx=(4, 0))
+        # No fixed width: wraplength follows the window width (see _fit) so long warnings
+        # wrap onto more lines and the window grows instead of truncating.
+        self.status = ttk.Label(sf, justify="left", anchor="w")
+        self.status.grid(row=0, column=1, sticky="ew", padx=(4, 0))
         self.help = ttk.Label(
             sf,
             text=strings.HELP_LINK,
@@ -267,6 +278,8 @@ class MainWindow:
         self.help.bind("<Button-1>", lambda e: self.open_help())
         self.help_anchor: str | None = None
         self._focused_once = False
+        self._fit_key: tuple | None = None
+        self.height = 0
 
     def close(self, *, balloon: bool = True) -> None:
         """✕ / Esc: hide to tray (§2.1). Without a tray (non-Windows dev runs) there would be
@@ -330,6 +343,7 @@ class MainWindow:
         x, y = place_window((x, y), (w, h), monitors, primary)
         self.placed = (x, y)
         self.root.geometry(f"{w}x{h}+{x}+{y}")
+        self.height = h
         self.root.bind("<Configure>", self._on_configure, add="+")
 
     def _on_configure(self, event: Any) -> None:
@@ -365,6 +379,7 @@ class MainWindow:
         self.start_btn.configure(text=strings.STOP if playing else strings.START)
         self.start_btn.state(["!disabled"] if (c.can_start or playing) else ["disabled"])
         self.hint.configure(text=st.hotkey_hint())
+        self._set_combo(self.hotkey, c.hotkey_options(), s.hotkey)
         self._set_combo(self.scale, c.scale_options(), s.scale)
         self._set_combo(self.key, c.key_options(), s.root)
         self.key.state(["!disabled"] if c.key_enabled else ["disabled"])
@@ -393,8 +408,33 @@ class MainWindow:
             self.help.grid(row=0, column=2, padx=(4, 0))
         else:
             self.help.grid_remove()
+        self._fit()
         if self.tray is not None:
             self.tray.update(st.tray_icon(), st.tray_tooltip(self.version), playing)
+
+    def status_wraplength(self) -> int:
+        """Pixels available for the status text: window width minus padding, dot and link."""
+        w, _ = self.size()
+        scale = w / WIDTH
+        used = self.dot.winfo_reqwidth() + round(28 * scale)
+        if self.help_anchor:
+            used += self.help.winfo_reqwidth() + round(4 * scale)
+        return max(50, w - used)
+
+    def _fit(self) -> None:
+        """Re-wrap the status text and grow (or shrink back) the window height to fit."""
+        key = (self.status.cget("text"), self.help_anchor)
+        if key == self._fit_key:
+            return
+        self._fit_key = key
+        self.status.configure(wraplength=self.status_wraplength())
+        self.root.update_idletasks()
+        w, base_h = self.size()
+        h = max(base_h, self.root.winfo_reqheight())
+        if h != self.height:
+            self.height = h
+            x, y = self.placed or (self.root.winfo_x(), self.root.winfo_y())
+            self.root.geometry(f"{w}x{h}+{x}+{y}")
 
     def show_window(self) -> None:
         self.root.deiconify()

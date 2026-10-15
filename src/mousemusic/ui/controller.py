@@ -17,6 +17,7 @@ from mousemusic import engine as eng
 from mousemusic.config import LoadResult, Settings
 from mousemusic.instruments import INSTRUMENT_SETS, load_scale_order, program_name
 from mousemusic.midi import DeviceLostError, NoDevicesError
+from mousemusic.platform.hotkey import HOTKEY_OFF, HOTKEY_PRESETS, candidates, normalize_setting
 from mousemusic.scales import NOTE_NAMES, SCALE_LABELS
 from mousemusic.ui import strings
 from mousemusic.ui.status import WARNING_SECONDS, StatusModel, display_note
@@ -63,8 +64,13 @@ class AppController:
         clock: Callable[[], float],
         *,
         hotkey_ok: bool = True,
+        hotkey_active: str | None = None,
+        hotkey_registrar: Callable[[str], None] | None = None,
         first_run: bool = False,
     ) -> None:
+        """``hotkey_active``: the shortcut that actually registered (may be the fallback);
+        defaults to the configured one when ``hotkey_ok``. ``hotkey_registrar(setting)``
+        re-registers live; its result comes back as a ``("hotkey", active)`` UI item."""
         self.settings = settings
         self.engine = engine
         self.saver = saver
@@ -76,9 +82,10 @@ class AppController:
         self.selected_device: str | None = None
         self.w5_shown = False
         self.quitting = False
+        self.hotkey_registrar = hotkey_registrar
         self.status = StatusModel(
-            hotkey=settings.hotkey,
-            hotkey_ok=hotkey_ok,
+            hotkey=hotkey_active or settings.hotkey,
+            hotkey_ok=hotkey_ok and settings.hotkey != HOTKEY_OFF,
             first_run=first_run or not settings.first_run_done,
             root=settings.root,
         )
@@ -97,11 +104,7 @@ class AppController:
             self.status.add_warning(
                 "W3", strings.W3_SETTINGS_CLAMPED, now, duration=WARNING_SECONDS, until_start=True
             )
-        if not self.status.hotkey_ok:
-            self.status.add_warning(
-                "W4", strings.W4_HOTKEY_OFF.format(hotkey=self.settings.hotkey), now,
-                duration=WARNING_SECONDS,
-            )  # fmt: skip
+        self._hotkey_warnings(self.status.hotkey if self.status.hotkey_ok else None, now)
         self.refresh_devices()
         if self.settings.start_on_launch and self.can_start:
             self.toggle()
@@ -302,6 +305,51 @@ class AppController:
         self._update(legato=bool(on))
         self._changed()
 
+    # -- global shortcut ---------------------------------------------------------------
+
+    def hotkey_options(self) -> list[Option]:
+        presets = list(HOTKEY_PRESETS)
+        if self.settings.hotkey not in presets:
+            presets.insert(0, self.settings.hotkey)
+        return [Option(p, p) for p in presets]
+
+    def set_hotkey(self, value: str) -> None:
+        setting = normalize_setting(value)
+        if setting is None or setting == self.settings.hotkey:
+            return
+        self._update(hotkey=setting, post=False)
+        if self.hotkey_registrar is not None:
+            self.hotkey_registrar(setting)  # result arrives via dispatch(("hotkey", ...))
+        else:
+            self.on_hotkey(None)
+        self._changed()
+
+    def on_hotkey(self, active: str | None) -> None:
+        """Registration result: the shortcut now active (configured or fallback), or None."""
+        self.status.hotkey = active or self.settings.hotkey
+        self.status.hotkey_ok = active is not None
+        self._hotkey_warnings(active, self.clock())
+        self._changed()
+
+    def _hotkey_warnings(self, active: str | None, now: float) -> None:
+        self.status.clear_warning("W4")
+        self.status.clear_warning("W7")
+        setting = self.settings.hotkey
+        if setting == HOTKEY_OFF:
+            return
+        if active is None:
+            tried = [c.text for c in candidates(setting)]
+            if len(tried) > 1:
+                text = strings.W4_HOTKEYS_OFF.format(hotkey=tried[0], fallback=tried[1])
+            else:
+                text = strings.W4_HOTKEY_OFF.format(hotkey=setting)
+            self.status.add_warning("W4", text, now, duration=WARNING_SECONDS)
+        elif active != setting:
+            self.status.add_warning(
+                "W7", strings.W7_HOTKEY_FALLBACK.format(hotkey=setting, active=active), now,
+                duration=WARNING_SECONDS,
+            )  # fmt: skip
+
     def window_moved(self, x: int, y: int) -> None:
         if (x, y) != (self.settings.window_x, self.settings.window_y):
             self._update(window_x=x, window_y=y, post=False)
@@ -315,8 +363,8 @@ class AppController:
         if self.view is not None:
             self.view.hide_window()
         if balloon and not self.settings.tray_hint_shown:
-            if self.status.playing:
-                text = strings.BALLOON_FIRST_CLOSE_PLAYING.format(hotkey=self.settings.hotkey)
+            if self.status.playing and self.status.hotkey_ok:
+                text = strings.BALLOON_FIRST_CLOSE_PLAYING.format(hotkey=self.status.hotkey)
             else:
                 text = strings.BALLOON_FIRST_CLOSE
             if self.view is not None:
@@ -359,6 +407,8 @@ class AppController:
             self.show_window()
         elif kind == "quit":
             self.quit()
+        elif kind == "hotkey":
+            self.on_hotkey(value)
         elif kind == "save_error":
             self.on_save_error()
         elif kind in (eng.SUSPEND, eng.RESUME, eng.DISPLAY_CHANGED):

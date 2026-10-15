@@ -63,3 +63,23 @@ def test_translate(msg, wp, cmd):
 
 def test_translate_without_show_message():
     assert translate_message(0xC123, 0) is None
+
+
+def test_candidates_and_register_first():
+    from mousemusic.platform.hotkey import (
+        candidates,
+        canonical,
+        normalize_setting,
+        parse_hotkey,
+        register_first,
+    )
+
+    assert [c.text for c in candidates("Ctrl+Alt+M")] == ["Ctrl+Alt+M", "Ctrl+Alt+Shift+M"]
+    assert [c.text for c in candidates("Ctrl+Alt+Shift+M")] == ["Ctrl+Alt+Shift+M"]
+    assert candidates("Off") == []
+    assert canonical(parse_hotkey("win+shift+f2")) == "Shift+Win+F2"
+    assert normalize_setting(3) is None and normalize_setting(" OFF ") == "Off"
+    cands = candidates("Ctrl+Alt+M")
+    assert register_first(cands, lambda hk: hk.text != "Ctrl+Alt+M").text == "Ctrl+Alt+Shift+M"
+    assert register_first(cands, lambda hk: False) is None
+    assert register_first([], lambda hk: True) is None

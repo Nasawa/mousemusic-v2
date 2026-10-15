@@ -3,6 +3,7 @@ and translating window messages into engine/UI commands (§9, §11 OQ-3). No cty
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 
 MOD_ALT = 0x0001
@@ -82,4 +83,51 @@ def translate_message(msg: int, wparam: int, show_message: int | None = None) ->
         return "display_changed"
     if show_message is not None and msg == show_message:
         return "show"
+    return None
+
+
+# -- settings value / fallback (pure) -----------------------------------------------------
+
+HOTKEY_OFF = "Off"
+DEFAULT_HOTKEY = "Ctrl+Alt+M"
+FALLBACK_HOTKEY = "Ctrl+Alt+Shift+M"
+#: Picker presets (docs/ux.md §1.1). Avoids Ctrl+Shift+<letter> and Win+<letter> combos that
+#: common apps/Windows already own.
+HOTKEY_PRESETS = (DEFAULT_HOTKEY, FALLBACK_HOTKEY, "Ctrl+Alt+P", "Ctrl+Alt+F9", HOTKEY_OFF)
+_MOD_ORDER = (("Ctrl", MOD_CONTROL), ("Alt", MOD_ALT), ("Shift", MOD_SHIFT), ("Win", MOD_WIN))
+
+
+def canonical(hk: Hotkey) -> str:
+    """Normalised text, e.g. ``alt+ctrl+m`` → ``Ctrl+Alt+M``."""
+    mods = [name for name, bit in _MOD_ORDER if hk.modifiers & bit]
+    key = hk.text.rsplit("+", 1)[-1].strip().upper()
+    return "+".join([*mods, key])
+
+
+def normalize_setting(value: object) -> str | None:
+    """settings.json ``hotkey`` → canonical text, ``"Off"``, or None if invalid."""
+    if isinstance(value, str) and value.strip().lower() in ("", "off", "none"):
+        return HOTKEY_OFF
+    hk = parse_hotkey(value)
+    return None if hk is None else canonical(hk)
+
+
+def candidates(setting: str) -> list[Hotkey]:
+    """What to try registering, in order: the configured key, then the fallback (if
+    different). ``Off`` → nothing."""
+    if setting == HOTKEY_OFF:
+        return []
+    out: list[Hotkey] = []
+    for text in (setting, FALLBACK_HOTKEY):
+        hk = parse_hotkey(text)
+        if hk is not None and all(canonical(hk) != canonical(o) for o in out):
+            out.append(Hotkey(hk.modifiers, hk.vk, canonical(hk)))
+    return out
+
+
+def register_first(cands: list[Hotkey], try_register: Callable[[Hotkey], bool]) -> Hotkey | None:
+    """Register the first candidate that succeeds; None if all fail (or none given)."""
+    for hk in cands:
+        if try_register(hk):
+            return hk
     return None
