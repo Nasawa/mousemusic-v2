@@ -166,7 +166,8 @@ Defaults:
   "first_run_done": false,
   "tray_hint_shown": false,
   "window_x": null,
-  "window_y": null
+  "window_y": null,
+  "theme": "system"
 }
 ```
 
@@ -178,6 +179,10 @@ Key notes (added after the UX review of PR #1):
   current monitor's work area (`MonitorFromPoint(..., MONITOR_DEFAULTTONULL)`), centre instead and don't overwrite
   until the window is moved.
 - `tray_hint_shown` is set after the first close-to-tray balloon. It is separate from `first_run_done`.
+- `theme` ∈ `system` | `light` | `dark` (default `system`, resolved from `AppsUseLightTheme`; Windows high contrast
+  overrides it). An unknown value or wrong type → `system` + W3. Adding it needs no `schema` bump (older builds ignore
+  unknown keys).
+- `hotkey`: normalised (`alt+ctrl+m` → `Ctrl+Alt+M`). `Off`/empty/`none` = disabled. Invalid → default + W3 (§11 S-3).
 - A fallback device (saved device missing) is **not** written to `midi_device`. Only an explicit user pick writes it.
 
 Pentatonic is the default because every note sounds consonant with every other, which makes the best first impression.
@@ -408,3 +413,33 @@ binding. Where one overlaps an earlier section, this section wins.
 | OQ-10 | Repeated corruption overwrites the single `settings.json.bak` (keep the latest one only, no accumulation). The overwrite is logged. |
 | OQ-11 | Unwritable location → W5 once per session, settings stay in memory, a retry happens on the next change, path and error are logged. No fallback to another location (no silent portable→APPDATA switch). |
 | OQ-12 | Yes. Start (and Reconnect) re-enumerates and opens the **saved** `midi_device` by name if present, even if a fallback was used earlier in the session. W1 clears once it's found. No background hot-plug watching. |
+
+### Dark mode (PR #22, issue #21)
+
+| # | Decision |
+|---|---|
+| Q-D1 | No "More…" area. Since #19 the window is a **minimum** of 340 × 330 logical px and grows to fit; the `Theme` row makes the minimum **340 × 360** (Shortcut + Theme rows). The P1 ≤ 360×300 budget is superseded: width stays 340 and the minimum height is 360. The status line still grows past that for long warnings. |
+| Q-D2 | Accepted: `theme` is added to §4 defaults (`"system"`) and validated like other enums (unknown/wrong type → `system` + W3). No `schema` bump. |
+| Q-D3 | The tray menu stays light (system default) in v0.x. No undocumented `uxtheme` ordinals. |
+| Q-D4 | Stay on stdlib `clam` with our palette tokens. No `sv-ttk` (keeps dependencies, bundle size and AV surface minimal, §1). Reconsider only if there's a v1 visual refresh. |
+
+### Test-plan ambiguities (A-1 – A-8)
+
+| # | Decision |
+|---|---|
+| A-1 | Resume = `PBT_APMRESUMEAUTOMATIC` **or** `PBT_APMRESUMESUSPEND` (as implemented). Duplicates and repeats are idempotent. Hibernate uses the same path. On Modern Standby (S0) the app may get no suspend at all: that's acceptable, because the engine keeps running and WinMM stays open. If a send then fails, E4 applies. A resume while **stopped** does **not** open the device; it stays closed until Start. SN-09f records behaviour and doesn't block. |
+| A-2 | Yes. The message window and its thread are created regardless of `RegisterHotKey` failing (or `Off`). Power, session and theme broadcasts keep working. Required; add a test. |
+| A-3 | The formula is `round(volume*127/100)`. For integer volumes 0–100 the only exact .5 case is 50 (63.5), which goes to 64 under both half-even and half-up, so the two rules are equivalent. Half-up is the documented intent and there's no code change. VO-02 stays as is. |
+| A-4 | `bool` = wrong type → default 80 + W3. A finite float is a number: rounded, then clamped (55.5 → 56). NaN/inf → default + W3. The same rule applies to every integer setting. |
+| A-5 | Yes. `set_volume` goes through the engine command queue and is coalesced to the latest value, so at most one CC7 per tick (≤ 125/s at 125 Hz). The file save stays debounced at 500 ms. |
+| A-6 | The **user-facing W/E codes and copy** are owned by `docs/ux.md` and are its source of truth. ARCHITECTURE defines only the triggering conditions. Tests reference the IDs; copy changes go through a ux.md PR that updates tests in the same PR. |
+| A-7 | "Constant thread count" means **long-lived** threads (main/Tk, engine, tray, message window). Transient threads (balloons, the settings-save debounce timer) are excluded, but must exit: the count at the end of the soak, after 10 s idle, must equal the count at the 2-min baseline. |
+| A-8 | Yes. A Defender hit on any file inside the zip counts as a Defender hit and blocks the release. The ≤ 3 VirusTotal rule is counted on the zip itself as VirusTotal reports it. |
+
+### PR #10 (S5) assumptions
+
+| # | Verdict |
+|---|---|
+| S-1 | **Ratified.** Volume changes merge to one CC7 per tick, latest wins (= A-5). |
+| S-2 | **Ratified.** After wake, the device is reopened only if it was playing before sleep; otherwise it stays closed until Start (= A-1, OQ-3). |
+| S-3 | **Ratified, settled by #19 and supersedes OQ-5.** Try the configured hotkey, then fall back to `Ctrl+Alt+Shift+M` (W7). W4 only if both fail. `Off` disables it. `hotkey` is now editable in the UI (Shortcut row) and validated; invalid → default + W3. |
