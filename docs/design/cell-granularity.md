@@ -4,7 +4,7 @@ Status: **Proposed** · Owner: Archimedes · Target: after rc2 (v0.2)
 
 ## 1. Problem and interpretation
 
-Christopher wants to tell **taskbar icons apart by sound** across two monitors. Today the columns are the notes of the
+Christopher wants to tell **taskbar icons apart by sound** across his monitors (two today, any number supported). Today the columns are the notes of the
 selected scale and range, spread across the whole virtual desktop (§5). Real numbers, two 1920 px monitors side by
 side (3840 px wide, 100 % scaling):
 
@@ -57,15 +57,16 @@ that's ~40 slots at 100 %, and Christopher's pinned set is probably 8–20.
 | Key | Type / range | Default | UI | Meaning |
 |---|---|---|---|---|
 | `taskbar_mode` | bool | `false` | **Yes** (checkbox) | Turns on the taskbar zone |
-| `taskbar_slot_dip` | int 24–128 | `48` | file-only | Icon pitch in DIP (96-DPI px). Physical width = `round(slot_dip × monitor_dpi / 96)` |
+| `taskbar_slot_dip` | int 24–128 | `48` | file-only | **Fallback** icon pitch in DIP, used when `taskbar_slot_source` is `fixed` or UI Automation fails (96-DPI px). Physical width = `round(slot_dip × monitor_dpi / 96)` |
 | `taskbar_offset_dip` | int 0–400 | `0` | file-only | Distance from the taskbar's left (or top) edge to the first slot. Covers a Start or widgets button the user wants to skip |
 | `taskbar_low_note` | int 0–127 | `48` (C3) | file-only | Note of slot 0. Later slots step up the **current scale and key** |
 | `taskbar_high_note` | int 0–127, ≥ low + 12 (OQ-8 rule) | `96` (C7) | file-only | Past this, wrap to `taskbar_low_note` (B) and play at `velocity × 0.7` so the wrap is audible |
 | `taskbar_program` | int 0–127, not a drum kit | `12` (Marimba) | file-only | Instrument for the whole zone. Y is ignored inside the zone |
-| `taskbar_monitors` | enum `primary` \| `all` | `all` | file-only | Which taskbars count. `all` is fully supported in phase 1 (Q1) |
-| `taskbar_secondary_program` | int 0–127, not a drum kit | `13` (Xylophone) | file-only | Instrument for **non-primary** taskbars, so the same slot on two monitors sounds different (Q1) |
+| `taskbar_monitors` | enum `primary` \| `all` | `all` | file-only | Which taskbars count. `all` means **every taskbar on any number of monitors (N ≥ 1)**, fully supported in phase 1 (Q1) |
+| `taskbar_slot_source` | enum `auto` \| `uia` \| `fixed` | `auto` | file-only | Where slot rects come from (§4.2a). `auto` = UI Automation, falling back to fixed widths per taskbar when it fails. `uia` = UI Automation only (a failed scan → zone inactive for that taskbar). `fixed` = `taskbar_slot_dip`/`taskbar_tray_slot_dip` only |
+| `taskbar_secondary_programs` | list of 1–8 ints 0–127, not drum kits | `[13, 108, 9]` (Xylophone, Kalimba, Glockenspiel) | file-only | Instruments for **non-primary** taskbars: the k-th secondary taskbar (in the order of §4.2a) uses entry `(k-1) mod len`, so the same slot on each monitor sounds different (Q1, N monitors) |
 | `taskbar_tray` | bool | `true` | file-only | Notification area (tray icons and clock) is part of the zone, with its own right-anchored slots (Q2) |
-| `taskbar_tray_slot_dip` | int 16–96 | `32` (provisional, set by CG-G2) | file-only | Tray icon pitch in DIP |
+| `taskbar_tray_slot_dip` | int 16–96 | `32` (provisional, set by CG-G2) | file-only | **Fallback** tray icon pitch in DIP (same rule) |
 | `cell_width_dip` | int 0 or 16–400 | `0` (= current behaviour) | file-only, **phase 2** | A: fixed desktop column width, with B wrapping |
 
 Invalid values → that key's default + W3. No `schema` bump (older builds ignore unknown keys).
@@ -99,6 +100,47 @@ Invalid values → that key's default + W3. No `schema` bump (older builds ignor
 - **Pure core:** `mapping.TaskbarZone(rect, axis, slot_px, offset_px)` plus `taskbar_cell(x, y, zone, grid)` contain
   no Win32 calls, so they're testable on Linux.
 
+### 4.2a Slot source: real icon rectangles via UI Automation (primary source)
+
+Christopher's taskbar is customised with Windhawk mods (custom icon size and spacing). His screenshot shows about 20
+left-aligned app icons on a bottom taskbar and a tray with ~8 icons plus the clock on the right. Fixed widths can't
+follow mods like that, so **the real rectangles are the primary source** and fixed widths are the fallback.
+
+- **Reader:** `platform/win_taskbar_uia.py` uses the UI Automation COM API (`CUIAutomation8` → `IUIAutomation`) via
+  **`comtypes`** (pure Python, pinned with `==`; it's the one new runtime dependency. Raw ctypes vtables were rejected as
+  too fragile for the size of this API).
+- **What it reads, per taskbar window** (`Shell_TrayWnd` and every `Shell_SecondaryTrayWnd`): `ElementFromHandle(hwnd)`,
+  then **one** `FindAllBuildCache(TreeScope_Descendants, condition, cache)` with a CacheRequest for
+  `BoundingRectangle`, `ClassName`, `AutomationId` and `ControlType` (one cross-process round-trip per taskbar). Matches:
+  - **app buttons:** the Windows 11 XAML taskbar button peers (ClassName `Taskbar.TaskListButtonAutomationPeer`; the
+    Start/Search/Task View/Widgets buttons are separate peer classes and count as app-side slots too, in screen order)
+  - **tray:** notification icon peers (`SystemTray.NormalButton`, plus the overflow chevron and the clock/Action Center
+    `SystemTray.OmniButton*`/`ClockButton`). The exact class names are **confirmed in CG-G2** on 23H2 and 24H2 with and
+    without Christopher's Windhawk mods, and kept in one table in the module.
+  Each element with a non-empty rect that is visible and inside the taskbar rect becomes a **slot rect**, in physical
+  px (per-monitor-v2 aware, the same space as `GetCursorPos`). They're sorted along the bar axis.
+- **Cells:** every slot rect is its own cell, whatever its size. App slots are numbered left→right and ascend from
+  `taskbar_low_note`. Tray slots are numbered right→left and descend from `taskbar_high_note` (§4.3 step 3a is
+  unchanged). Gaps between rects (padding, an empty middle) are silent cells. The 2 px hysteresis applies at each rect
+  edge. Nothing else in §4.3 changes.
+- **N monitors:** every taskbar found is scanned. Ordering for instruments and status text: the primary is 1, then the
+  secondaries sorted by their monitor's `(left, top)`. That's stable across restarts as long as the monitor layout is.
+- **Threading and cost cap:** UIA calls go cross-process into Explorer and can block, so they **never run on the engine
+  thread**. A dedicated `taskbar-scan` thread (COM MTA, long-lived, counted in A-7's long-lived set when taskbar mode is
+  on) produces an immutable `TaskbarSnapshot` that the engine swaps in atomically.
+  - **When:** on Start; every **2 s** while playing with `taskbar_mode` on (never while stopped or with the mode off);
+    and immediately (debounced 250 ms) on `WM_DISPLAYCHANGE`, `WM_SETTINGCHANGE`, `WM_DPICHANGED` and the registered
+    `TaskbarCreated` message (Explorer restart), all from the existing message window.
+  - **Budget:** target < 30 ms per full scan. If a scan takes > **150 ms**, the interval doubles (up to 30 s) and
+    recovers after 3 fast scans. A scan has a **1 s** hard timeout. On a timeout or COM error, the previous snapshot
+    stays in use, and after 2 failures in a row that taskbar falls back as below. Measured cost goes in the debug log
+    and in LT-06 (CPU < 2 % still applies).
+- **Fallback (`auto`):** per taskbar, if UIA fails (COM error, timeout, zero matching elements, or an Explorer
+  replacement like StartAllBack/ExplorerPatcher with no XAML peers), use the **fixed** slots from §4.2
+  (`taskbar_slot_dip`/`taskbar_tray_slot_dip` × that monitor's DPI, the tray from `TrayNotifyWnd`). The source in use is
+  logged at info and shown in `--self-test` output. No UI message: the feature degrades, it doesn't break.
+- **`fixed`:** UIA is never loaded, which is the escape hatch if UIA ever proves slow or crashy on someone's machine.
+
 ### 4.3 Mapping integration (§5)
 
 1. Each tick: if `taskbar_mode` is on and the cursor is inside a zone rect → **zone cell** `("tb", monitor_index, part, slot)`,
@@ -108,7 +150,7 @@ Invalid values → that key's default + W3. No `schema` bump (older builds ignor
    it's still a cell so the hysteresis and rate-limit state stays consistent).
 3. **Apps part:** note = `scale_notes_from(taskbar_low_note)[slot]`. **Every taskbar starts at `taskbar_low_note`**,
    so slot k has the same pitch on every monitor and the monitors are told apart by **instrument**: the primary uses
-   `taskbar_program`, others use `taskbar_secondary_program`. (Continuing the numbering across monitors was rejected:
+   `taskbar_program`, others use `taskbar_secondary_programs`. (Continuing the numbering across monitors was rejected:
    it would depend on monitor order and on how many icons the first bar has, which breaks stability.) If a note is
    past `taskbar_high_note`, wrap modulo the in-range notes and use velocity × 0.7.
 3a. **Tray part (Q2): anchored from the tray's right edge**, not continuing the app sequence. Tray slot 0 is the
@@ -122,7 +164,7 @@ Invalid values → that key's default + W3. No `schema` bump (older builds ignor
    wins). At 48 px slots a fast sweep (~3000 px/s) crosses a slot every ~16 ms, so the limit drops intermediates as
    designed. Slow hovering, the actual use, is never limited.
 5. **Instrument:** entering a zone sends a program change to that zone's program (primary → `taskbar_program`,
-   others → `taskbar_secondary_program`; the tray uses its taskbar's program) before the note-on. Leaving restores
+   others → `taskbar_secondary_programs`; the tray uses its taskbar's program) before the note-on. Leaving restores
    the row's program before the next note (the same rule as a row change, §5). Instrument rows (Y) are ignored inside the
    zone.
 6. Status line inside the zone: `E4 · Taskbar 7 · Marimba`, `E4 · Taskbar 2/7 · Xylophone` on a secondary, and
@@ -156,6 +198,13 @@ Everything else is file-only (README documents the keys). Tray menu: unchanged.
   - `taskbar_mode: false` → mapping identical to today, as a property test across random points
 - **Engine (fake clock and cursor):** a slow sweep along a 20-slot bar gives 20 distinct ascending notes. A fast
   sweep respects the rate limit. Hover jitter of ±1 px at a slot edge gives no retrigger.
+- **Pure (UIA snapshot → cells):** snapshots of recorded rect lists (Christopher's ~20 custom-size icons + tray,
+  default Windows 11, mixed widths, gaps, an empty list) give one cell per rect, ascending app notes and descending tray
+  notes; gaps are silent; `auto` with an empty or failed snapshot gives the fixed-width slots; `fixed` never calls the
+  reader; N = 1, 2 and 4 taskbars get ordering and programs per §4.2a.
+- **Scanner (fake reader and clock):** 2 s interval only while playing; backoff when > 150 ms and recovery after 3 fast
+  scans; 1 s timeout keeps the previous snapshot; 2 failures → fallback; debounced refresh on display, setting and
+  `TaskbarCreated` messages.
 - **Windows (A-win):** `win_taskbar` returns a rect that contains the Start button's rect, and the edge is bottom on the
   default setup. It finds a `Shell_SecondaryTrayWnd` per extra monitor when one exists (skipped on a single-monitor
   runner) and a `TrayNotifyWnd` rect inside the primary bar. The geometry refreshes after a taskbar setting change.
@@ -170,9 +219,11 @@ and `taskbar_tray_slot_dip` defaults come from it.
 - **CG-S1** Pure zone mapping (including multiple zones, the tray part and secondary programs) in `mapping.py` plus the settings keys and validation in `config.py`.
   *AC:* the tests above pass. With `taskbar_mode: false`, mapping output is byte-identical to today's (property test).
   Coverage ≥ 90 %.
-- **CG-S2** `platform/win_taskbar.py` (ABM_GETTASKBARPOS for the primary, EnumWindows for `Shell_SecondaryTrayWnd`,
-  TrayNotifyWnd/clock rects, GetDpiForMonitor per taskbar) and the refresh hooks.
-  *AC:* the A-win test passes on CI. An Explorer restart doesn't crash and just deactivates the zone until the next refresh.
+- **CG-S2** `platform/win_taskbar.py` (ABM_GETTASKBARPOS for the primary, EnumWindows for **all**
+  `Shell_SecondaryTrayWnd`, TrayNotifyWnd/clock rects, GetDpiForMonitor per taskbar) **plus the UI Automation reader**
+  `platform/win_taskbar_uia.py` (comtypes, cached `FindAll` per taskbar, the class-name table from CG-G2), the
+  `taskbar-scan` thread with its interval, backoff, timeout and fallback (§4.2a), and the `taskbar_slot_source` setting.
+  *AC:* the A-win test passes on CI. On Christopher's Windhawk setup every app icon and tray icon gets its own cell (checked with the `--self-test` dump of slot rects). A scan costs < 30 ms typical. An Explorer restart doesn't crash and just deactivates the zone until the next refresh.
 - **CG-S3** Engine and scheduler integration: zone cells, program change on enter/leave, wrap velocity, status text.
   *AC:* engine tests pass, and LT-01 still shows ≤ 1 tick of added latency.
 - **CG-S4 (phase 2, separate PR)** `cell_width_dip` desktop mode, with B wrapping.
@@ -182,13 +233,19 @@ and `taskbar_tray_slot_dip` defaults come from it.
   setting the alignment to Left, the file-only keys, and how to tune `taskbar_offset_dip`/`taskbar_slot_dip` for
   scaling or icon size.
   *AC:* a user can enable the mode and tune it from the README alone.
-- **CG-P2** Listen-check `taskbar_program` **and `taskbar_secondary_program`** (they must be clearly different from
+- **CG-P2** Listen-check `taskbar_program` **and `taskbar_secondary_programs`** (they must be clearly different from
   each other) against all three instrument sets. Marimba vs. Classic's Marimba row may
   collide, so propose an alternative if needed (e.g. 13 Xylophone or 108 Kalimba).
   *AC:* a short note in `docs/curation.md`.
 
 ### Grace (QA)
 - **CG-G1** Test-plan section TB-xx covering:
+  - custom icon size: with Windhawk taskbar mods changing icon size and spacing (and with the registry/small-icon
+    variants), `auto` gives exactly one cell per visible icon; `fixed` shows the mismatch (documents why UIA is the default)
+  - UIA failure: force `fixed`, kill Explorer mid-play, and use an Explorer replacement if available → fallback slots, no
+    crash, recovery after `TaskbarCreated`
+  - 3+ monitors if available (else simulate in A tests): every taskbar is a zone, and each secondary gets the next
+    program in `taskbar_secondary_programs`
   - 2 monitors, taskbars on **both**, left alignment, 100/150 % scaling (including mixed DPI): each pinned icon on
     each taskbar gives a distinct note, the two monitors are distinguishable by instrument, and the same icon gives the
     same note after a restart
@@ -203,15 +260,21 @@ and `taskbar_tray_slot_dip` defaults come from it.
   - small-icons registry tweak (shows the need for `taskbar_slot_dip`)
   *AC:* results recorded in the RC checklist.
 - **CG-G2 (gate for CG-S1)** Measure the actual Windows 11 **taskbar icon pitch and tray icon pitch** at
-  100/125/150/200 % on 23H2 and 24H2 with a screenshot ruler, on primary and secondary taskbars.
+  100/125/150/200 % on 23H2 and 24H2 with a screenshot ruler, on primary and secondary taskbars. **Also confirm that UI
+  Automation measurement works**: dump the UIA tree (Accessibility Insights or Inspect.exe) on stock Windows 11 **and
+  with Christopher's Windhawk taskbar mods enabled**, and record the ClassNames and AutomationIds of app buttons, Start/
+  Search/Widgets, tray icons, the overflow chevron and the clock, and whether the BoundingRectangles match the visible
+  icons at the custom sizes.
   *AC:* numbers posted on #16. `taskbar_slot_dip` and `taskbar_tray_slot_dip` defaults are confirmed or corrected.
-  CG-S1 doesn't merge before this.
+  The UIA class-name table is confirmed too. CG-S1 doesn't merge before this.
 
 ## 6. Resolved questions
 
-- **Q1 → resolved:** it must work on both of Christopher's monitors (#16). `taskbar_monitors` defaults to `all` and is
+- **Q1 → resolved:** it must work on every taskbar on any number of monitors (#16). `taskbar_monitors` defaults to `all` and is
   fully supported in phase 1. Each taskbar has its own anchor and DPI. Each starts at `taskbar_low_note`, and the
-  monitors are told apart by instrument (`taskbar_secondary_program`).
+  monitors are told apart by instrument (`taskbar_secondary_programs`).
 - **Q2 → resolved:** the tray and notification area is in the zone, with its own slots anchored from the right edge and
   descending from `taskbar_high_note` (§4.3 step 3a).
+- **Q4 → resolved (custom icon sizes):** Christopher's taskbar uses Windhawk mods, so real icon rectangles come from UI
+  Automation (`taskbar_slot_source: auto`), with fixed widths as the per-taskbar fallback (§4.2a).
 - **Q3 → resolved:** CG-G2 measures the pitches, and it is a gate. CG-S1 doesn't merge before it.
