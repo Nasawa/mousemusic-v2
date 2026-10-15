@@ -45,7 +45,7 @@ Design principles:
 │  Instruments  [ Classic (8)            ▾ ]      │   row 4
 │       Volume  [━━━━━━━━━━━━●━━━]  80 %          │   row 5
 │  Note length  [━━━━●━━━━━━━━━━━]  250 ms        │   row 6
-│               [ ] Hold notes (legato)           │   row 7
+│     [ ] Hold notes (legato)  [ ] Taskbar notes  │   row 7  two checkboxes (§12)
 │  MIDI output  [ Microsoft GS Wavetable ▾ ] [⟳]  │   row 8  device + Reconnect
 │     Shortcut  [ Ctrl+Alt+M         ▾ ]          │   row 8c global shortcut
 │ ─────────────────────────────────────────────── │
@@ -54,7 +54,7 @@ Design principles:
 ```
 
 Tab order is top to bottom, left to right: Start → Scale → Key → Low → High → Instruments → Volume → Note length →
-Hold notes → MIDI output → Reconnect → Shortcut. Start has focus when the window opens.
+Hold notes → Taskbar notes → MIDI output → Reconnect → Shortcut. Start has focus when the window opens.
 
 ### 1.2 Controls
 
@@ -68,6 +68,7 @@ Hold notes → MIDI output → Reconnect → Shortcut. Start has focus when the 
 | 5 | `Volume` | ttk.Scale + value label | 0–100 %, step 1 | 80 % | `volume` | Label `80 %`. Sent as CC7 Channel Volume (`round(volume*127/100)`) on open, on Start and on every change. Live. `velocity` (default 100) is file-only |
 | 6 | `Note length` | ttk.Scale + value label | 50–2000 ms, step 10 | 250 ms | `note_length_ms` | Label `250 ms`. **Disabled** when Hold notes is checked |
 | 7 | `Hold notes (legato)` | ttk.Checkbutton | on/off | off | `legato` | When on, a note holds until the cursor enters the next cell or until Stop |
+| 7b | `Taskbar notes` | ttk.Checkbutton, same row as 7 | on/off | off | `taskbar_mode` | Each taskbar icon gets its own note. Applies live. See §12 |
 | 8 | `MIDI output` | readonly Combobox, ellipsized at ~24 chars, full name in tooltip | WinMM device names | `Microsoft GS Wavetable Synth` | `midi_device` | **Re-enumerates every time the dropdown opens** (§9). Choosing a device while playing silences, closes and reopens (engine `set_device`). If the list is empty the combobox shows `No MIDI output found` and is disabled |
 | 8b | `⟳` (tooltip `Reconnect`) | small ttk.Button | — | — | — | Closes and reopens the selected device. Use it after unplugging headphones etc. Status: `Reconnecting…` then the normal status |
 | 8c | `Shortcut` | readonly Combobox | `Ctrl+Alt+M`, `Ctrl+Alt+Shift+M`, `Ctrl+Alt+P`, `Ctrl+Alt+F9`, `Off` (a custom value from the file is listed first) | `Ctrl+Alt+M` | `hotkey` | Re-registers live on change. If the chosen key is taken, `Ctrl+Alt+Shift+M` is tried as a fallback (W7); if both fail, W4 |
@@ -287,3 +288,71 @@ All of these were resolved by Archimedes in `ARCHITECTURE.md` §11. That section
 | Q6 | Pitch-range granularity | ✅ Octave Cs (C0–C8) only. Semitones JSON-only, shown as an extra item (§1.2) |
 | Q7 | Help link target | ✅ `https://github.com/Nasawa/mousemusic-v2#<anchor>`, anchors defined in `ui/strings.py`. P4 keeps them (§4) |
 | Q8 | Mid-play device-loss detection | ✅ Any non-zero `midiOutShortMsg` → silence, close, stop (E4). No polling or auto-reconnect. Silent endpoint changes → manual ⟳ (W6) |
+
+---
+
+## 12. Taskbar notes (CG-P1, design #23 / issue #16)
+
+Behaviour is defined in `docs/design/cell-granularity.md` (PR #23). This section covers only what the user sees.
+If the two disagree, the design doc wins for behaviour and this doc wins for wording (ARCHITECTURE §11 A-6).
+
+### 12.1 Control
+
+| Item | Spec |
+|---|---|
+| Label (exact) | `Taskbar notes` |
+| Widget | `ttk.Checkbutton` on **row 7, right of `Hold notes (legato)`**, in the same frame. No extra row, so the window stays at its minimum height |
+| Tooltip (exact) | `Each taskbar icon gets its own note. Works best with taskbar icons aligned left.` |
+| Settings key / default | `taskbar_mode`, `false`. The other `taskbar_*` keys are file-only (README "Hearing your taskbar") |
+| Tab order | … Note length → Hold notes → **Taskbar notes** → MIDI output → … |
+| Keyboard | Space toggles it when focused, like every checkbutton |
+| Live | Takes effect on the next engine tick. No restart, and no Stop needed while playing |
+| Enabled state | Always enabled, even when no taskbar is currently found (it may appear later, see §12.3) |
+
+### 12.2 Status line inside the zone
+
+Format follows the normal `<Note> · <Instrument> · <Device>` (§1.3), with the instrument part replaced by the zone:
+
+| Where the cursor is | Status text (exact pattern) | Example |
+|---|---|---|
+| Primary taskbar, app icon slot k (1-based) | `<Note> · Taskbar <k> · <Instrument>` | `E4 · Taskbar 7 · Xylophone` |
+| Taskbar on monitor m (not primary) | `<Note> · Taskbar <m>/<k> · <Instrument>` | `E4 · Taskbar 2/7 · Celesta` |
+| Tray area, slot k from the right (1 = clock end) | `<Note> · Tray <k> · <Instrument>` | `C7 · Tray 1 · Xylophone` |
+| Offset area before slot 1 (silent) | `Taskbar · no note here` | — |
+
+- Monitor numbers are Windows' display numbers (1 = primary), not enumeration order, so they match Settings → Display.
+- The device name is dropped inside the zone, to keep the line short. It returns when the cursor leaves.
+- Instrument names come from `instruments.py`. Examples use the CG-P2 recommendation (`docs/listen-check.md`).
+
+### 12.3 Situations
+
+| Situation | Behaviour (from the design) | What the user sees |
+|---|---|---|
+| Taskbar **auto-hide** on | The zone uses the taskbar's shown rect. When hidden, the cursor at the screen edge is inside it, so it plays the slot under the cursor (and Windows slides the taskbar out) | Normal zone status. No message |
+| Taskbar on **another monitor**, or taskbars on **all displays** | Each taskbar is its own zone, anchored to its own left edge, scaled to its own monitor's DPI. Slot k has the same pitch on every monitor, and a different instrument on non-primary taskbars | `Taskbar 2/7 · …` on the secondary |
+| "Show my taskbar on all displays" **off** | Only the primary taskbar is a zone. The other monitors use the normal desktop mapping right to the bottom edge | Desktop status there |
+| Taskbar **centered** | Still deterministic, but icons move as apps open and close, so an app won't keep its note | No message. The README and the tooltip recommend Left alignment |
+| **No taskbar found** (Explorer restarting, an API error) | Zone inactive, desktop mapping everywhere. Retried every 2 s and on display or setting changes | No message (per design). The checkbox stays checked |
+| Vertical taskbar (third-party tools) | Slots run top to bottom. Best effort | Same status format |
+
+**New wording:** only the status patterns in §12.2 and the tooltip. No new W/E codes. An invalid `taskbar_*` value uses the existing W3.
+
+### 12.4 Checklist for Sprite (UI part of CG-S1–S3)
+
+- [ ] `strings.py`: `LABEL_TASKBAR = "Taskbar notes"`, `TASKBAR_TOOLTIP`, `STATUS_TASKBAR = "{note} · Taskbar {slot} · {instrument}"`, `STATUS_TASKBAR_MON = "{note} · Taskbar {monitor}/{slot} · {instrument}"`, `STATUS_TRAY = "{note} · Tray {slot} · {instrument}"`, `STATUS_TASKBAR_SILENT = "Taskbar · no note here"`.
+- [ ] `window.py`: put the checkbutton in the row 7 frame, right of Hold notes, with 16 px between them, and bind it to `controller.set_taskbar_mode`. Tooltip as in §12.1. Tab order as in §12.1.
+- [ ] `config.py`: `taskbar_mode: bool = False` (and the file-only keys per design §4.1). Round-trip test.
+- [ ] `status.py`: the zone status patterns, slot numbers 1-based, monitor number = Windows display number.
+- [ ] No message for a missing taskbar. Log at debug only.
+- [ ] Manual: check the window still fits at its minimum width at 100/150/200 % with both checkboxes on row 7. If the label clips, shorten the gap before wrapping (see Q-T1).
+
+### 12.5 Open questions (taskbar notes)
+
+- **Q-T1 Width.** `[ ] Hold notes (legato)   [ ] Taskbar notes` is ~300 logical px of text at Segoe UI 9. That fits in
+  340 at 100 %, but it's tight in some locales and fonts. Fallback: label `Hold notes` (drop "(legato)", keep it in a
+  tooltip). Sprite to measure.
+- **Q-T2 "Not found" feedback.** The design says no user message when no taskbar is found. Users who check the box and
+  hear nothing new may be confused. Option: add `(no taskbar found)` to the tooltip while the zone is inactive.
+  Recommend yes (it's tooltip-only, not a status message). Archimedes?
+- **Q-T3 Instruments.** CG-P2 recommends `taskbar_program` 13 Xylophone and `taskbar_secondary_program` 8 Celesta
+  instead of 12/13 (see `docs/listen-check.md`). Needs Archimedes' sign-off and a human listen on Windows.
