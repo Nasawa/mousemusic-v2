@@ -11,6 +11,7 @@ from mousemusic.mapping import Rect
 from mousemusic.midi import NoDevicesError
 from mousemusic.ui import strings
 from mousemusic.ui.controller import AppController
+from mousemusic.ui.fit import HomePosition
 from mousemusic.ui.window import MainWindow, TkCursorCache, Tooltip
 from test_controller import GS, Clock, FakeEngine, FakeSaver
 
@@ -227,7 +228,7 @@ def test_window_moved_saves(root):
     w, ctl, *_ = build(root)
     w.show_window()
     root.update()
-    w.placed = (-1, -1)
+    w.home.current = (-1, -1)  # the window is no longer where we put it: a user move
 
     class Ev:
         widget = root
@@ -358,6 +359,87 @@ def test_tooltip_uses_palette(root):
     w.theme_tip.show()
     assert str(w.theme_tip.tip.cget("bg")).upper() == "#2D2D2D"
     w.theme_tip.hide()
+
+
+def _areas(w, area):
+    w.work_areas, w.primary = [area], area
+
+
+def test_height_capped_truncated_tooltip_and_return_home(root, caplog):
+    caplog.set_level("INFO")
+    from mousemusic.mapping import Rect
+
+    w, ctl, *_ = build(root)
+    w.show_window()
+    root.update()
+    _areas(w, Rect(0, 0, 1000, 900))
+    w.home = HomePosition((50, 500))
+    w.placed = (50, 500)
+    long = " ".join(["word"] * 600)
+    w.full_status = long
+    w._fit_key = None
+    w._fit()
+    root.update()
+    cap = 900 - w.chrome_height()
+    assert w.height == cap and w.truncated
+    shown = w.status.cget("text")
+    assert shown.endswith("…") and len(shown) < len(long)
+    assert w.status_tip.current_text() == long
+    assert "full text" in caplog.text
+    assert w.placed == (50, 900 - w.height)  # clamped up onto the work area (B-3) ...
+    assert w.home.home == (50, 500)  # ... home kept (C-1) ...
+    assert ctl.settings.window_x is None  # ... and the clamp move is not saved
+    w.full_status = "short"
+    w._fit_key = None
+    w._fit()
+    assert not w.truncated and w.status_tip.current_text() == ""
+    assert w.placed == (50, 500)  # fits again: back home
+    assert w.height == w.size()[1]
+
+
+def test_user_move_after_clamp_becomes_home(root):
+    from mousemusic.mapping import Rect
+
+    w, ctl, *_ = build(root)
+    w.show_window()
+    root.update()
+    _areas(w, Rect(0, 0, 1000, 800))
+    w.home = HomePosition((10, 700))
+    w.placed = (10, 700)
+    w._fit_key = None
+    w._fit()
+    assert w.home.clamped
+    root.geometry("+20+30")
+    root.update()
+
+    class Ev:
+        widget = root
+
+    w._on_configure(Ev())
+    assert w.home.home == (root.winfo_x(), root.winfo_y()) and not w.home.clamped
+    assert ctl.settings.window_x == root.winfo_x()
+
+
+def test_status_announced_and_tab_order(root):
+    seen = []
+    w, _ctl, *_ = build(root, announce=lambda h, t: seen.append((h, t)))
+    assert seen and seen[-1] == (w.status.winfo_id(), w.full_status)
+    w.show_window()
+    root.update()
+    w.reconnect.focus_set()
+    root.update()
+    w.reconnect.event_generate("<Tab>")
+    root.update()
+    assert root.focus_get() is w.status and w.status.instate(["focus"])
+    w.status.event_generate("<Tab>")
+    root.update()
+    assert root.focus_get() is w.hotkey
+    w.hotkey.event_generate("<Shift-Tab>")
+    root.update()
+    assert root.focus_get() is w.status
+    w.status.event_generate("<Shift-Tab>")
+    root.update()
+    assert root.focus_get() is w.reconnect and not w.status.instate(["focus"])
 
 
 def test_preview_button(root):

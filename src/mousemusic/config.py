@@ -342,6 +342,10 @@ def load_report(path: Path) -> LoadResult:
     settings, issues = validate(raw)
     for issue in issues:
         log.warning("settings: %s", issue)
+    if not issues and raw.get("theme", settings.theme) != settings.theme:
+        # B-1: a valid but non-canonical theme (" Dark ") is written back lowercase now,
+        # not only on the next unrelated save.
+        _try_save(settings, path)
     return LoadResult(settings, existed=True, issues=tuple(issues))
 
 

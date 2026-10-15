@@ -80,6 +80,15 @@ def make_monitors() -> Any:
     return None  # window falls back to Tk's screen size
 
 
+def make_announcer() -> Any:
+    """C-2: full status text to screen readers via the label's window text (Windows only)."""
+    if sys.platform != "win32":
+        return None
+    from mousemusic.platform.win_a11y import Announcer  # pragma: no cover - Windows only
+
+    return Announcer()  # pragma: no cover - Windows only
+
+
 def make_title_bar() -> Any:
     """(root, dark) -> immersive dark title bar on the root's frame window (Windows only)."""
     if sys.platform != "win32":
@@ -197,6 +206,7 @@ def _run_app(opts: Options, instance: Any) -> int:
     window = MainWindow(
         root, controller, ui_queue=ui_queue, tray=tray, version=__version__,
         cursor_cache=cache, monitors=make_monitors(), title_bar=make_title_bar(),
+        announce=make_announcer(),
     )  # fmt: skip
     engine.start_thread()
     controller.startup(loaded)

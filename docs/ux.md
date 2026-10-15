@@ -62,7 +62,7 @@ Design principles:
 ```
 
 Tab order is top to bottom, left to right: Start → Scale → Key → Low → High → Instruments → Preview → Volume → Note length →
-Hold notes → Taskbar notes → MIDI output → Reconnect → Shortcut → Theme. Start has focus when the window opens.
+Hold notes → Taskbar notes → MIDI output → Reconnect → status line (C-2) → Shortcut → Theme. Start has focus when the window opens.
 
 ### 1.2 Controls
 

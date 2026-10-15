@@ -530,3 +530,18 @@ def test_theme_default_and_round_trip(tmp_path):
     path = tmp_path / "settings.json"
     config.save(DEFAULTS.replace(theme="dark"), path)
     assert config.load_report(path).settings.theme == "dark"
+
+
+def test_noncanonical_theme_saved_back_lowercase(tmp_path):
+    import json
+
+    from mousemusic import config
+
+    path = tmp_path / "settings.json"
+    path.write_text(json.dumps({"theme": " Dark "}), encoding="utf-8")
+    got = config.load_report(path)
+    assert got.settings.theme == "dark" and not got.issues
+    assert json.loads(path.read_text(encoding="utf-8"))["theme"] == "dark"
+    before = path.stat().st_mtime_ns
+    config.load_report(path)  # canonical now: not rewritten
+    assert path.stat().st_mtime_ns == before
