@@ -34,7 +34,9 @@ def test_self_test_passes_with_zero_devices():
         "PASS settings",
         "PASS mapping",
         "PASS midi",
+        "PASS taskbar",
     ]
+    assert "     no taskbar zone" in lines  # no taskbar on CI/Linux: still a pass
 
 
 def test_self_test_reports_failure():
