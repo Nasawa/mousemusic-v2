@@ -43,6 +43,20 @@ NOTE_LENGTH_RANGE_MS = (50, 2000)
 POLL_HZ_RANGE = (30, 250)
 WINDOW_POS_RANGE = (-32768, 32767)
 
+# Taskbar notes (docs/design/cell-granularity.md §4.1, CG-S1). Fallback pitches only matter
+# when UI Automation can't give real icon rects (CG-G2: 44 DIP app button, 32 DIP tray icon,
+# from Windows 11 defaults; pending Archimedes' sign-off, change them here).
+TASKBAR_SLOT_DIP_DEFAULT = 44
+TASKBAR_TRAY_SLOT_DIP_DEFAULT = 32
+TASKBAR_PROGRAM_DEFAULT = 13  # Xylophone (CG-P2, docs/listen-check.md)
+TASKBAR_SECONDARY_DEFAULT = (8, 108, 9)  # Celesta first, then Kalimba, Glockenspiel
+TASKBAR_SLOT_DIP_RANGE = (24, 128)
+TASKBAR_TRAY_SLOT_DIP_RANGE = (16, 96)
+TASKBAR_OFFSET_DIP_RANGE = (0, 400)
+TASKBAR_SECONDARY_MAX = 8
+TASKBAR_MONITORS = ("primary", "all")
+TASKBAR_SLOT_SOURCES = ("auto", "uia", "fixed")
+
 #: Migrations from older schemas, ``{from_version: fn(raw) -> raw}``, applied in order (OQ-9).
 #: Empty while schema 1 is the only version; a file without ``schema`` is treated as 1.
 MIGRATIONS: dict[int, Callable[[dict[str, Any]], dict[str, Any]]] = {}
@@ -72,6 +86,18 @@ class Settings:
     tray_hint_shown: bool = False
     window_x: int | None = None
     window_y: int | None = None
+    # Taskbar notes; everything but taskbar_mode is file-only (design §4.1).
+    taskbar_mode: bool = False
+    taskbar_slot_dip: int = TASKBAR_SLOT_DIP_DEFAULT
+    taskbar_offset_dip: int = 0
+    taskbar_low_note: int = 48
+    taskbar_high_note: int = 96
+    taskbar_program: int = TASKBAR_PROGRAM_DEFAULT
+    taskbar_monitors: str = "all"
+    taskbar_slot_source: str = "auto"
+    taskbar_secondary_programs: tuple[int, ...] = TASKBAR_SECONDARY_DEFAULT
+    taskbar_tray: bool = True
+    taskbar_tray_slot_dip: int = TASKBAR_TRAY_SLOT_DIP_DEFAULT
 
     def replace(self, **changes: Any) -> Settings:
         """A validated copy with ``changes`` applied (for UI updates)."""
@@ -79,7 +105,9 @@ class Settings:
         return validate(merged)[0]
 
     def to_dict(self) -> dict[str, Any]:
-        return dataclasses.asdict(self)
+        d = dataclasses.asdict(self)
+        d["taskbar_secondary_programs"] = list(self.taskbar_secondary_programs)
+        return d
 
 
 DEFAULTS = Settings()
@@ -160,6 +188,20 @@ def _optional_int(raw: Mapping[str, Any], key: str, issues: _Issues) -> int | No
     return clamped
 
 
+def _programs(raw: Mapping[str, Any], key: str, issues: _Issues) -> tuple[int, ...]:
+    """A list of 1-8 GM programs (0-127). Anything else → the default + W3."""
+    default = getattr(DEFAULTS, key)
+    if key not in raw:
+        return default
+    value = raw[key]
+    if isinstance(value, (list, tuple)) and 1 <= len(value) <= TASKBAR_SECONDARY_MAX:
+        nums = [_as_int(v) if not isinstance(v, float) else None for v in value]
+        if all(n is not None and NOTE_RANGE[0] <= n <= NOTE_RANGE[1] for n in nums):
+            return tuple(nums)  # type: ignore[arg-type]
+    issues.add(key, value, list(default))
+    return default
+
+
 def _hotkey(raw: Mapping[str, Any], issues: _Issues) -> str:
     """Normalised to e.g. ``Ctrl+Alt+M`` (any modifier order/case accepted) or ``Off``.
     Unparsable values fall back to the default like any other invalid setting (W3)."""
@@ -236,6 +278,11 @@ def validate(raw: Mapping[str, Any]) -> tuple[Settings, list[str]]:
         _int(raw, "high_note", *NOTE_RANGE, issues),
         issues,
     )
+    tb_low, tb_high = _note_range(
+        _int(raw, "taskbar_low_note", *NOTE_RANGE, issues),
+        _int(raw, "taskbar_high_note", *NOTE_RANGE, issues),
+        issues,
+    )
 
     settings = Settings(
         schema=SCHEMA_VERSION,
@@ -258,6 +305,19 @@ def validate(raw: Mapping[str, Any]) -> tuple[Settings, list[str]]:
         tray_hint_shown=_bool(raw, "tray_hint_shown", issues),
         window_x=_optional_int(raw, "window_x", issues),
         window_y=_optional_int(raw, "window_y", issues),
+        taskbar_mode=_bool(raw, "taskbar_mode", issues),
+        taskbar_slot_dip=_int(raw, "taskbar_slot_dip", *TASKBAR_SLOT_DIP_RANGE, issues),
+        taskbar_offset_dip=_int(raw, "taskbar_offset_dip", *TASKBAR_OFFSET_DIP_RANGE, issues),
+        taskbar_low_note=tb_low,
+        taskbar_high_note=tb_high,
+        taskbar_program=_int(raw, "taskbar_program", *NOTE_RANGE, issues),
+        taskbar_monitors=_choice(raw, "taskbar_monitors", TASKBAR_MONITORS, issues),
+        taskbar_slot_source=_choice(raw, "taskbar_slot_source", TASKBAR_SLOT_SOURCES, issues),
+        taskbar_secondary_programs=_programs(raw, "taskbar_secondary_programs", issues),
+        taskbar_tray=_bool(raw, "taskbar_tray", issues),
+        taskbar_tray_slot_dip=_int(
+            raw, "taskbar_tray_slot_dip", *TASKBAR_TRAY_SLOT_DIP_RANGE, issues
+        ),
     )
     return settings, list(issues)
 
