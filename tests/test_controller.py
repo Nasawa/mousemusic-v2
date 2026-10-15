@@ -463,3 +463,61 @@ def test_theme_default_probe():
     ctl, *_ = make()
     assert (ctl.apps_light, ctl.high_contrast) == (None, False)
     assert ctl.effective_theme == "light"
+
+
+class FakePreviewer:
+    def __init__(self):
+        self.active = False
+        self.started = []
+        self.cancelled = 0
+
+    def start(self, device, volume, program):
+        self.active = True
+        self.started.append((device, volume, program))
+        return True
+
+    def cancel(self):
+        self.cancelled += 1
+        self.active = False
+
+
+def test_preview_rules():
+    from mousemusic.instruments import INSTRUMENT_SETS, program_name
+    from mousemusic.midi import DeviceBusyError
+
+    p = FakePreviewer()
+    ctl, e, *_ = make(previewer=p)
+    ctl.startup()
+    first = INSTRUMENT_SETS[ctl.settings.instrument_set].programs[0]
+    assert ctl.preview_program == first and ctl.can_preview
+    assert program_name(first) in ctl.preview_tooltip()
+    ctl.preview()
+    assert p.started == [(GS, ctl.settings.volume, first)]
+    assert ctl.previewing and not ctl.can_preview
+    ctl.preview()  # already previewing: ignored
+    assert len(p.started) == 1
+    ctl.toggle()  # Start cancels the preview before the engine opens the device
+    assert p.cancelled == 1 and e.posted[-1][0] == "start"
+    ctl.handle_event(eng.Event("started", {"device": GS}))
+    assert not ctl.can_preview and ctl.preview_tooltip() == strings.PREVIEW_TOOLTIP_PLAYING
+    ctl.preview()
+    assert len(p.started) == 1
+    ctl.handle_event(eng.Event("stopped"))
+    ctl.dispatch(("preview_done", None))
+    ctl.dispatch(("preview_done", DeviceBusyError("busy", device=GS)))
+    assert ctl.status.error.id == "E2"
+    ctl.preview()
+    ctl.quit()  # quitting cancels a running preview
+    assert p.cancelled == 2
+
+
+def test_preview_unavailable_without_previewer_or_device():
+    ctl, *_ = make()
+    ctl.startup()
+    assert not ctl.can_preview and not ctl.previewing
+    ctl.preview()
+    p = FakePreviewer()
+    ctl2, *_ = make(previewer=p, devices=())
+    ctl2.startup()
+    ctl2.preview()
+    assert p.started == []

@@ -53,7 +53,7 @@ jobs:
           $PREFIX python -m pytest -m "not windows_audio" --cov=mousemusic --cov-report=term-missing
 
       - name: Coverage gate (>= 90% on pure core, ARCHITECTURE.md §8)
-        run: python -m coverage report --include="*/mousemusic/config.py,*/mousemusic/scheduler.py,*/mousemusic/engine.py,*/mousemusic/platform/*,*/mousemusic/midi/*,*/mousemusic/mapping.py,*/mousemusic/scales.py,*/mousemusic/instruments.py,*/mousemusic/logs.py,*/mousemusic/ui/status.py,*/mousemusic/ui/controller.py,*/mousemusic/ui/strings.py,*/mousemusic/ui/window.py,*/mousemusic/ui/placement.py,*/mousemusic/ui/theme.py" --fail-under=90
+        run: python -m coverage report --include="*/mousemusic/config.py,*/mousemusic/scheduler.py,*/mousemusic/engine.py,*/mousemusic/platform/*,*/mousemusic/midi/*,*/mousemusic/mapping.py,*/mousemusic/scales.py,*/mousemusic/instruments.py,*/mousemusic/logs.py,*/mousemusic/ui/status.py,*/mousemusic/ui/controller.py,*/mousemusic/ui/strings.py,*/mousemusic/ui/window.py,*/mousemusic/ui/placement.py,*/mousemusic/ui/theme.py,*/mousemusic/preview.py" --fail-under=90
 
       - name: --version smoke
         run: python -m mousemusic --version
@@ -106,6 +106,25 @@ jobs:
           $ver = (& dist\MouseMusic.exe --version | Out-String)
           if (-not $ver.Contains("mousemusic ")) { throw "missing --version output: '$ver'" }
           Write-Host "MouseMusic.exe --self-test OK (output visible)"
+
+      - name: Smoke test built exe (--play-instrument)
+        shell: pwsh
+        run: |
+          $out = (& dist\MouseMusic.exe --play-instrument 40 --dry-run | Out-String)
+          if ($LASTEXITCODE -ne 0) { throw "--play-instrument --dry-run exited $LASTEXITCODE" }
+          Write-Host $out
+          foreach ($want in @("Playing GM program 40 (Violin)", "msg C0 28 00", "Done:")) {
+            if (-not $out.Contains($want)) { throw "missing '$want' in --play-instrument output" }
+          }
+          $bad = (& dist\MouseMusic.exe --play-instrument 200 2>&1 | Out-String)
+          if ($LASTEXITCODE -ne 2) { throw "invalid program exited $LASTEXITCODE, want 2" }
+          if (-not $bad.Contains("0 to 127")) { throw "missing invalid-program message: '$bad'" }
+          # Real WinMM: runners usually have no MIDI output, so 0 (played) or 1 (friendly E1).
+          $real = (& dist\MouseMusic.exe --play-instrument 0 2>&1 | Out-String)
+          Write-Host $real
+          if ($LASTEXITCODE -gt 1) { throw "real --play-instrument exited $LASTEXITCODE" }
+          if ($real.Contains("Traceback")) { throw "traceback in --play-instrument output" }
+          exit 0  # a friendly MIDI error (1) is acceptable here
 
       - name: Verify embedded manifest declares DPI awareness
         run: python tools/check_manifest.py dist/MouseMusic.exe

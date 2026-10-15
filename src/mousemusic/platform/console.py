@@ -28,11 +28,13 @@ INVALID_HANDLE_VALUE = -1
 FILE_TYPE_UNKNOWN = 0
 
 # Flags that print and exit; anything else starts the GUI and needs no console.
-CLI_FLAGS = frozenset({"--self-test", "--list-devices", "--version", "-h", "--help"})
+CLI_FLAGS = frozenset(
+    {"--self-test", "--list-devices", "--play-instrument", "--version", "-h", "--help"}
+)
 
 
 def wants_console(argv: Sequence[str]) -> bool:
-    return any(a in CLI_FLAGS for a in argv)
+    return any(a.split("=", 1)[0] in CLI_FLAGS for a in argv)  # also --flag=value
 
 
 def _load_kernel32() -> Any:  # pragma: no cover - Windows only

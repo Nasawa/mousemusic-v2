@@ -102,3 +102,11 @@ def test_main_attaches_only_for_cli_flags(monkeypatch):
     monkeypatch.setattr("mousemusic.app.run", lambda opts: 0)
     assert m.main(["--dry-run"]) == 0
     assert calls == [1]
+
+
+def test_wants_console_play_instrument_forms():
+    from mousemusic.platform.console import wants_console
+
+    assert wants_console(["--play-instrument", "5"])
+    assert wants_console(["--play-instrument=5"])
+    assert not wants_console(["--dry-run"])

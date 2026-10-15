@@ -26,6 +26,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="check settings, mapping and MIDI enumeration without a window, then exit",
     )
     parser.add_argument(
+        "--play-instrument",
+        metavar="PROGRAM",
+        help="play a short scale on GM program PROGRAM (0-127) on the saved MIDI output, then exit",
+    )
+    parser.add_argument(
         "--dry-run", action="store_true", help="print MIDI messages instead of sending them"
     )
     parser.add_argument(
@@ -114,6 +119,53 @@ def list_devices(backend_factory: Callable[[], MidiOut] | None = None, out=print
     return 0
 
 
+def play_instrument(
+    text: str,
+    *,
+    dry_run: bool = False,
+    portable: bool = False,
+    backend_factory: Callable[[], MidiOut] | None = None,
+    wait: Callable[[float], bool] | None = None,
+    out=print,
+    err=None,
+) -> int:
+    """``--play-instrument PROGRAM``: exit 0 played, 2 invalid program, 1 MIDI error
+    (no device / busy / failed). Never a traceback."""
+    import sys
+    import threading
+
+    from mousemusic import config, preview
+    from mousemusic.instruments import program_name
+
+    err = err or (lambda line: print(line, file=sys.stderr))
+    try:
+        program = preview.parse_program(text)
+    except preview.InvalidProgram as exc:
+        err(strings.CLI_INVALID_PROGRAM.format(detail=exc))
+        return 2
+    try:
+        settings = config.load(config.settings_path(portable=portable))
+    except Exception:
+        logging.getLogger(__name__).exception("loading settings failed; using defaults")
+        settings = config.DEFAULTS
+    if backend_factory is None:
+        from mousemusic.app import make_backend
+
+        backend_factory = lambda: make_backend(settings, dry_run)  # noqa: E731
+    out(strings.CLI_PLAYING.format(program=program, name=program_name(program)))
+    try:
+        device = preview.play_once(
+            backend_factory(), settings.midi_device, settings.volume, program,
+            wait or threading.Event().wait,
+        )  # fmt: skip
+    except Exception as exc:
+        logging.getLogger(__name__).warning("--play-instrument failed: %r", exc)
+        err(strings.midi_error_message(exc, settings.midi_device)[0])
+        return 1
+    out(strings.CLI_PLAYED.format(device=device))
+    return 0
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     import sys
 
@@ -126,6 +178,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         return list_devices()
     if args.self_test:
         return self_test()
+    if args.play_instrument is not None:
+        return play_instrument(args.play_instrument, dry_run=args.dry_run, portable=args.portable)
     from mousemusic.app import Options, run
 
     return run(Options(dry_run=args.dry_run, portable=args.portable, log_level=args.log_level))

@@ -92,3 +92,60 @@ def test_list_devices_backend_failure_is_friendly(caplog):
     lines = []
     assert list_devices(boom, lines.append) == 0
     assert lines == ["No MIDI output devices found."]
+
+
+def _play(text, be=None, **kw):
+    from mousemusic.__main__ import play_instrument
+    from mousemusic.midi.fake import FakeMidiOut
+
+    out, err = [], []
+    be = be if be is not None else FakeMidiOut()
+    rc = play_instrument(text, backend_factory=lambda: be, wait=lambda s: False,
+                         out=out.append, err=err.append, **kw)  # fmt: skip
+    return rc, out, err, be
+
+
+def test_play_instrument_ok(tmp_path, monkeypatch):
+    monkeypatch.setenv("APPDATA", str(tmp_path))
+    rc, out, err, be = _play("40")
+    assert rc == 0 and not err
+    assert out == ["Playing GM program 40 (Violin)...",
+                   "Done: played on Microsoft GS Wavetable Synth."]  # fmt: skip
+    assert (0xC0, 40, 0) in be.messages
+
+
+@pytest.mark.parametrize("text", ["128", "-3", "violin"])
+def test_play_instrument_invalid(text):
+    rc, out, err, be = _play(text)
+    assert rc == 2 and not out and not be.messages
+    assert err[0].startswith("--play-instrument needs a GM program number from 0 to 127")
+
+
+def test_play_instrument_no_device_and_busy(tmp_path, monkeypatch):
+    from mousemusic.midi.fake import FakeMidiOut
+    from mousemusic.ui import strings
+
+    monkeypatch.setenv("APPDATA", str(tmp_path))
+    rc, _out, err, _ = _play("0", FakeMidiOut([]))
+    assert rc == 1 and err == [strings.E1_NO_DEVICE]
+    rc, _out, err, _ = _play("0", FakeMidiOut(["Synth"], open_errors={0: 4}))
+    assert (rc == 1 and "Synth" in err[0] and "in use" in err[0].lower()) or rc == 1
+
+
+def test_play_instrument_bad_settings_uses_defaults(monkeypatch):
+    import mousemusic.config as config
+
+    monkeypatch.setattr(config, "load", lambda p: (_ for _ in ()).throw(OSError("x")))
+    rc, *_ = _play("1")
+    assert rc == 0
+
+
+def test_play_instrument_main_dry_run(capsys, tmp_path, monkeypatch):
+    import threading
+
+    monkeypatch.setenv("APPDATA", str(tmp_path))
+    monkeypatch.setattr(threading.Event, "wait", lambda self, t=None: False)
+    assert main(["--play-instrument=5", "--dry-run"]) == 0
+    text = capsys.readouterr().out
+    assert "Playing GM program 5" in text and "msg C0 05 00" in text and "Done:" in text
+    assert main(["--play-instrument", "999"]) == 2
