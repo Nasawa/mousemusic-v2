@@ -54,6 +54,7 @@ class MessageWindow(threading.Thread):  # pragma: no cover - Windows only
         self._pending: str | None = None
         self.on_command = on_command
         self.show_message = show_message
+        self.taskbar_created: int | None = None  # registered "TaskbarCreated" (Explorer restart)
         self.on_session_end = on_session_end
         self.hwnd: Any = None
         self.ready = threading.Event()
@@ -155,7 +156,8 @@ class MessageWindow(threading.Thread):  # pragma: no cover - Windows only
                 setting = None
                 if msg == WM_SETTINGCHANGE and lparam:
                     setting = ctypes.wstring_at(lparam)  # e.g. "ImmersiveColorSet"
-                cmd = translate_message(msg, wparam, self.show_message, setting)
+                cmd = translate_message(msg, wparam, self.show_message, setting,
+                                        self.taskbar_created)  # fmt: skip
                 if cmd is not None:
                     if msg == WM_ENDSESSION and self.on_session_end is not None:
                         self.on_session_end()  # silence before Windows ends the process
@@ -178,6 +180,7 @@ class MessageWindow(threading.Thread):  # pragma: no cover - Windows only
         wc.hInstance = hinst
         # Unique per instance: a window class is bound to one wndproc (this instance's).
         wc.lpszClassName = f"MouseMusicV2MessageWindow{id(self):x}"
+        self.taskbar_created = user32.RegisterWindowMessageW("TaskbarCreated") or None
         if not user32.RegisterClassW(ctypes.byref(wc)):
             log.warning("RegisterClassW failed: %s", ctypes.get_last_error())
         self.hwnd = user32.CreateWindowExW(

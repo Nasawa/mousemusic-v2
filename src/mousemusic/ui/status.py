@@ -8,6 +8,7 @@ warning shows, then the normal status.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import Any
 
 from mousemusic.instruments import program_name
 from mousemusic.ui import strings
@@ -70,7 +71,8 @@ class StatusModel:
     connecting: bool = False
     reconnecting: bool = False
     started_once: bool = False
-    last_note: tuple[int, int] | None = None
+    last_note: tuple[int | None, int | None] | None = None
+    zone: Any = None  # ZoneCell while the cursor is on a taskbar (CG-S3)
     error: _Message | None = None
     warnings: list[_Message] = field(default_factory=list)
 
@@ -136,10 +138,24 @@ class StatusModel:
         self.connecting = self.reconnecting = False
         self.last_note = None
 
-    def on_note(self, note: int, program: int) -> None:
+    def on_note(self, note: int | None, program: int | None, zone: Any = None) -> None:
+        """``zone`` is the :class:`~mousemusic.mapping.ZoneCell` inside a taskbar zone."""
         self.last_note = (note, program)
+        self.zone = zone
 
     # -- rendering ---------------------------------------------------------------------
+
+    def _zone_text(self, zone: Any, note: int | None, program: int | None) -> str:
+        """docs/ux.md §12.2; slots 1-based; the device is dropped inside the zone."""
+        if note is None or program is None or zone.slot < 0:
+            return strings.STATUS_TASKBAR_SILENT
+        args = {"note": display_note(note, self.root), "instrument": program_name(program),
+                "slot": zone.slot + 1, "monitor": zone.monitor}  # fmt: skip
+        if zone.part == "tray":
+            return strings.STATUS_TRAY.format(**args)
+        if zone.order != 0:
+            return strings.STATUS_TASKBAR_MON.format(**args)
+        return strings.STATUS_TASKBAR.format(**args)
 
     def current(self, now: float) -> Status:
         self.expire(now)
@@ -163,6 +179,9 @@ class StatusModel:
                 return Status(strings.DOT_NORMAL, ROLE_OK,
                               strings.STATUS_PLAYING_IDLE.format(device=dev))  # fmt: skip
             note, program = self.last_note
+            zone = self.zone
+            if zone is not None:
+                return Status(strings.DOT_NORMAL, ROLE_OK, self._zone_text(zone, note, program))
             text = strings.STATUS_PLAYING.format(
                 note=display_note(note, self.root), instrument=program_name(program), device=dev
             )

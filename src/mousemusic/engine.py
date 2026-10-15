@@ -26,7 +26,18 @@ from dataclasses import dataclass, field
 from typing import Any, Protocol
 
 from mousemusic.config import DEFAULTS, Settings
-from mousemusic.mapping import Cell, Grid, HysteresisMapper, Rect, build_grid
+from mousemusic.mapping import (
+    Cell,
+    Grid,
+    HysteresisMapper,
+    Rect,
+    TaskbarSound,
+    TaskbarZone,
+    ZoneCell,
+    ZoneMapper,
+    build_grid,
+    build_taskbar_sound,
+)
 from mousemusic.midi import DeviceLostError, MidiError, MidiOut, MidiOutput
 from mousemusic.scheduler import NoteParams, Scheduler
 
@@ -101,6 +112,9 @@ START, STOP, SET_SETTINGS, SET_DEVICE, SET_VOLUME = (
 )
 SUSPEND, RESUME, QUIT, DISPLAY_CHANGED = "suspend", "resume", "quit", "display_changed"
 RECONNECT = "reconnect"
+TASKBAR = "taskbar"  # value: taskbar.TaskbarSnapshot from the taskbar-scan thread (CG-S3)
+TASKBAR_KEYS = ("scale", "root", "taskbar_low_note", "taskbar_high_note", "taskbar_program",
+                "taskbar_secondary_programs")  # fmt: skip
 
 
 class Engine:
@@ -124,7 +138,9 @@ class Engine:
         self.scheduler = Scheduler(self.output, self._params(settings))
         self.grid: Grid = self._grid(settings)
         self.rect: Rect | None = None
-        self.mapper: HysteresisMapper | None = None
+        self.mapper: ZoneMapper | None = None
+        self.zones: tuple[TaskbarZone, ...] = ()  # latest snapshot, swapped in atomically
+        self.taskbar_sound = self._taskbar_sound(settings)
         self.cell: Cell | None = None
         self.playing = False
         self.was_playing_before_suspend = False
@@ -144,6 +160,14 @@ class Engine:
     @staticmethod
     def _grid(s: Settings) -> Grid:
         return build_grid(s.scale, s.root, s.low_note, s.high_note, s.instrument_set)
+
+    @staticmethod
+    def _taskbar_sound(s: Settings) -> TaskbarSound:
+        return build_taskbar_sound(s.scale, s.root, s.taskbar_low_note, s.taskbar_high_note,
+                                   s.taskbar_program, s.taskbar_secondary_programs)  # fmt: skip
+
+    def _active_zones(self) -> tuple[TaskbarZone, ...]:
+        return self.zones if self.settings.taskbar_mode else ()
 
     @property
     def period_s(self) -> float:
@@ -192,6 +216,11 @@ class Engine:
             if self.playing:
                 self.stop(emit=False)
                 self.start(now)
+        elif cmd == TASKBAR:
+            self.zones = tuple(value.zones)
+            if self.mapper is not None:
+                self.mapper.set_zones(self._active_zones())
+                self.cell = None
         elif cmd == DISPLAY_CHANGED:
             self.metrics_at = None
         elif cmd == QUIT:
@@ -209,6 +238,12 @@ class Engine:
             self.grid = self._grid(settings)
             self.metrics_at = None
             self.mapper = None
+            self.cell = None
+        if any(getattr(old, k) != getattr(settings, k) for k in TASKBAR_KEYS):
+            self.taskbar_sound = self._taskbar_sound(settings)
+            self.cell = None
+        if old.taskbar_mode != settings.taskbar_mode and self.mapper is not None:
+            self.mapper.set_zones(self._active_zones())  # live, no Stop needed (ux §12.1)
             self.cell = None
         if settings.volume != old.volume:
             self.pending_volume = settings.volume
@@ -261,7 +296,7 @@ class Engine:
             return  # keep the last good rect
         if rect != self.rect or self.mapper is None:
             self.rect = rect
-            self.mapper = HysteresisMapper(self.grid, rect)
+            self.mapper = ZoneMapper(HysteresisMapper(self.grid, rect), self._active_zones())
             self.cell = None
 
     def step(self, now: float) -> None:
@@ -294,10 +329,25 @@ class Engine:
             cell = self.mapper.update(*pos)
             if cell != self.cell:  # a new note only on cell change (§5)
                 self.cell = cell
-                note, program = self.grid.sound(cell)
-                self.scheduler.request(note, program, now)
-                self.emit(Event("note", {"note": note, "program": program}))
+                if isinstance(cell, ZoneCell):
+                    self._zone_note(cell, now)
+                else:
+                    note, program = self.grid.sound(cell)
+                    self.scheduler.request(note, program, now)
+                    self.emit(Event("note", {"note": note, "program": program}))
         self.scheduler.tick(now)
+
+    def _zone_note(self, cell: ZoneCell, now: float) -> None:
+        """Taskbar cell (design §4.3): the zone's program, sent before the note-on by the
+        scheduler; wrapped notes softer. A silent cell (offset, gap) plays nothing."""
+        sound = self.taskbar_sound.sound(cell)
+        if sound is None:
+            self.emit(Event("note", {"note": None, "program": None, "zone": cell}))
+            return
+        note, program, factor = sound
+        velocity = max(1, round(self.settings.velocity * factor)) if factor != 1.0 else None
+        self.scheduler.request(note, program, now, velocity)
+        self.emit(Event("note", {"note": note, "program": program, "zone": cell}))
 
     def _device_lost(self, exc: DeviceLostError) -> None:
         # MidiOutput already silenced (best effort) and closed; no retry, no polling (OQ-1).
