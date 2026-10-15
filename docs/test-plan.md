@@ -207,7 +207,9 @@ Status: the spec is accepted (§4, §11), but on `main` at 54ba2fe **there's no 
 | ID | Case | Steps | Expected | Type |
 |---|---|---|---|---|
 | TH-01 | Default | No settings file | `theme` = `system`. No schema bump (`schema` stays 1) (§4, Q-D2) | A |
-| TH-02 | Validation | `"light"`, `"dark"`, `"system"`, `"Dark"`, `"blue"`, `1`, `null`, `true` | The three exact values are kept. Anything else → `system` + W3. Note: case-sensitivity is unspecified, see B-1 | A |
+| TH-02 | Validation (case-insensitive) | `"light"`, `"DARK"`, `" Dark "`, `"System\t"` | Stripped and lowercased → `light`/`dark`/`system`, **no** W3 (§11 B-1, ux §1) | A |
+| TH-02a | Invalid values | `"blue"`, `""`, `"   "`, `"dark mode"`, `1`, `null`, `true`, `["dark"]` | → `system` + W3 (§11 B-1) | A |
+| TH-02b | Canonical write-back | Load `" Dark "`, then change any setting so it saves | File now has `"theme": "dark"`. Without a change the file isn't rewritten (§11 B-1, OQ-9 no-rewrite rule) | A |
 | TH-03 | Older build ignores the key | Load a file with `theme` in an older build (or `validate` with an unknown key) | Ignored, no W3 (§4 unknown keys) | A |
 | TH-04 | System resolution | Windows Settings → Personalization → Colors: Light, then Dark, with `theme: system` | App palette follows `AppsUseLightTheme` | M |
 | TH-05 | Live follow | Switch Windows Light↔Dark with the app open (window visible and hidden) | Repaints without a restart (`WM_SETTINGCHANGE` "ImmersiveColorSet", with `<FocusIn>` as a backup, per PR #22). Title bar turns dark too (DWM attribute 20/19) | M |
@@ -224,11 +226,17 @@ Status: the spec is accepted (§4, §11), but on `main` at 54ba2fe **there's no 
 
 | ID | Case | Steps | Expected | Type |
 |---|---|---|---|---|
-| WS-01 | Minimum at 100 % | Launch with short status text | Client area 340 × 360 logical px (Shortcut + Theme rows). Width fixed at 340 | A (window test) + M |
+| WS-01 | Minimum at 100 % | Launch with short status text | Client area 340 × 360 logical px (Shortcut + Theme rows). Width fixed at 340. Code check: `ui/window.py` minimum `HEIGHT` is 360, not the old 330 (§11 B-4, ux §1) | A (window test) + M |
 | WS-02 | Grows for long warnings | Trigger the two-key W4 (both shortcuts taken) | Height > 360 so every wrapped line is visible. Shrinks back to 360 once it clears | A + M |
 | WS-03 | DPI scaling | 150 % and 200 % | Size scales (≈ 510 × 540 and 680 × 720 physical). Nothing clipped | M |
-| WS-04 | Small screens | 1366 × 768 @ 125 %, plus the longest warning | Window still fits on screen. See B-2 | M |
-| WS-05 | Saved position near the bottom edge | `window_y` close to the bottom of the work area, then grow | Whether the window is moved back on screen is unspecified, see B-3 | M |
+| WS-04 | Height cap = work area | Unit: fake work area shorter than the required height (e.g. 400 px) with a 5-line status | Height = work-area height of the **current monitor** (`rcWork`, taskbar never covered). Never taller (§11 B-2) | A |
+| WS-04a | Truncation | Same as WS-04 | Status shows only the whole lines that fit; the last ends in `…`. No scrollbar. The full text is in the status tooltip **and** the log (§11 B-2, ux §1/row 9) | A + M |
+| WS-04b | Truncation clears | Shorten the message (warning expires) or move to a taller monitor | Full text visible again, no `…`. Window shrinks back toward 360 (§11 B-2) | A |
+| WS-04c | Real small screen | 1366 × 768 @ 200 % (or 1280 × 720 @ 200 %), trigger the two-key W4. Hover the status | Window bottom stays above the taskbar. If it's truncated, `…` shows and the tooltip has the full W4 text | M |
+| WS-05 | Re-clamp after growth | Unit: window placed with its bottom 20 px above the work-area bottom, then status grows by 3 lines | `place_window((x,y),(w,h_capped),work_areas,primary)` runs after each height change: window moves **up** only as far as needed to stay inside the work area. It grows downward when there's room (§11 B-3) | A |
+| WS-05a | Taller than the area | Height capped to the area (WS-04) | Window pinned to the work area's top (`_clamp`) (§11 B-3) | A |
+| WS-05b | Temporary position not saved | After WS-05's automatic move, let the debounce pass, then check settings | `window_x`/`window_y` unchanged. Only a user drag saves a new position. After the status shrinks, the window doesn't jump back by itself unless spec says so (see C-1) | A + M |
+| WS-05c | Manual edge case | Drag the window near the bottom of a monitor, trigger W4 | Window moves up to stay on screen. Quit + relaunch: opens at the dragged position, not the moved one | M |
 
 ## 8. Other §9 risks
 
@@ -296,9 +304,12 @@ A-1 – A-8 were answered in **§11** (commit 5ef93d1) and are applied in the ca
 
 **A-6 (§11):** user-facing W/E codes and copy are owned by `docs/ux.md`. ARCHITECTURE only defines when they trigger. Test cases reference codes by ID (W1, W3, W4, W7, E2, E4, …). Copy changes go through a ux.md PR that updates the tests in the same PR.
 
-Still open (new):
-- **B-1 Theme value case:** the hotkey is normalised case-insensitively. Is `"Dark"` valid for `theme`, or does it mean `system` + W3?
-- **B-2 Window height on small screens:** what should happen when 360 logical px plus a long warning doesn't fit the work area (for example 768 px at 150 %)?
-- **B-3 Growing near a screen edge:** when the window grows downward from a saved position near the bottom, should it be moved back into the work area?
-- **B-4 docs/ux.md §1** still says "340 × 300, fixed" and "≤ 360×300". It needs updating to the §11 Q-D1 minimum of 340 × 360 (maybe in PR #22).
-- **B-5 Instrument audition:** there's no CLI flag or preset to play one GM program directly. Checking a specific instrument (e.g. Banjo 105, New Age Pad 88) means moving to its row. A `--play-instrument N` (or `--dry-run`-style audition) flag would make the RC listen check one click.
+B-1 – B-4 were answered in **§11** (commit 35c01d7) and docs/ux.md §1: B-1 → TH-02/02a/02b; B-2 → WS-04/04a/04b/04c; B-3 → WS-05/05a/05b/05c; B-4 → WS-01 (minimum 340 × 360, grows to fit; code `HEIGHT` must move from 330 to 360).
+
+Still open:
+- **B-5 Instrument audition:** there's no CLI flag or preset to play one GM program directly. A `--play-instrument N` (or similar) flag would make the RC listen check one click.
+- **C-1 Restoring after a temporary move:** B-3 says the moved position isn't saved, but not whether the window should return to its pre-growth position on screen once the status shrinks again.
+- **C-2 Truncation and screen readers:** the tooltip and log carry the full text (B-2). Is the status label's accessible name the full or the truncated text?
+
+### Pending: cell granularity (CG-G1)
+On hold until Archimedes revises #23 (slots from UI Automation button/tray rects, `taskbar_slot_source: auto|uia|fixed`, every taskbar on any monitor). The TB-xx cases will be written against that revision.
