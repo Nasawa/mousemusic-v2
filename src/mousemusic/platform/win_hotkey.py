@@ -19,39 +19,64 @@ import threading
 from collections.abc import Callable
 from typing import Any
 
-from mousemusic.platform.hotkey import MOD_NOREPEAT, WM_ENDSESSION, Hotkey, translate_message
+from mousemusic.platform.hotkey import (
+    MOD_NOREPEAT,
+    WM_ENDSESSION,
+    Hotkey,
+    candidates,
+    register_first,
+    translate_message,
+)
 
 log = logging.getLogger(__name__)
 
 HOTKEY_ID = 1
 WM_CLOSE = 0x0010
 WM_DESTROY = 0x0002
+WM_APP_REREGISTER = 0x8001  # WM_APP + 1
 
 
 class MessageWindow(threading.Thread):  # pragma: no cover - Windows only
     def __init__(
         self,
-        hotkey: Hotkey | None,
+        hotkey_setting: str,
         on_command: Callable[[str], None],
         *,
+        on_hotkey: Callable[[str | None], None] | None = None,
         show_message: int | None = None,
         on_session_end: Callable[[], None] | None = None,
     ) -> None:
         super().__init__(name="mousemusic-hotkey", daemon=True)
-        self.hotkey = hotkey
+        self.setting = hotkey_setting
+        self.on_hotkey = on_hotkey
+        self.active: Hotkey | None = None
+        self._pending: str | None = None
         self.on_command = on_command
         self.show_message = show_message
         self.on_session_end = on_session_end
-        self.hotkey_ok = False
         self.hwnd: Any = None
         self.ready = threading.Event()
         self._proc: Any = None
 
-    def start_and_wait(self, timeout: float = 2.0) -> bool:
-        """Start the thread; returns whether the hotkey registered (False → W4)."""
+    def start_and_wait(self, timeout: float = 2.0) -> str | None:
+        """Start the thread; returns the shortcut that registered (configured or the
+        Ctrl+Alt+Shift+M fallback), or None (W4)."""
         self.start()
         self.ready.wait(timeout)
-        return self.hotkey_ok
+        return self.active.text if self.active else None
+
+    def reregister(self, setting: str) -> None:
+        """Live change from the picker: re-register on the window's own thread (Win32
+        hotkeys belong to the registering thread); result goes to ``on_hotkey``."""
+        self._pending = setting
+        if self.hwnd:
+            from ctypes import wintypes
+
+            user32 = ctypes.WinDLL("user32")
+            user32.PostMessageW.argtypes = [
+                wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM,
+            ]  # fmt: skip
+            user32.PostMessageW(self.hwnd, WM_APP_REREGISTER, 0, 0)
 
     def run(self) -> None:
         from ctypes import wintypes
@@ -104,8 +129,28 @@ class MessageWindow(threading.Thread):  # pragma: no cover - Windows only
         kernel32.GetModuleHandleW.argtypes = [wintypes.LPCWSTR]
         kernel32.GetModuleHandleW.restype = wintypes.HMODULE
 
+        def try_register(hk: Hotkey) -> bool:
+            ok = bool(user32.RegisterHotKey(self.hwnd, HOTKEY_ID, hk.modifiers | MOD_NOREPEAT,
+                                            hk.vk))  # fmt: skip
+            if not ok:
+                log.warning("RegisterHotKey(%s) failed: %s", hk.text, ctypes.get_last_error())
+            return ok
+
+        def register(setting: str) -> None:
+            if self.active is not None:
+                user32.UnregisterHotKey(self.hwnd, HOTKEY_ID)
+                self.active = None
+            self.setting = setting
+            self.active = register_first(candidates(setting), try_register)
+            log.info("global shortcut: %s", self.active.text if self.active else "none")
+
         def proc(hwnd: Any, msg: int, wparam: int, lparam: int) -> int:
             try:
+                if msg == WM_APP_REREGISTER:
+                    register(self._pending if self._pending is not None else self.setting)
+                    if self.on_hotkey is not None:
+                        self.on_hotkey(self.active.text if self.active else None)
+                    return 0
                 cmd = translate_message(msg, wparam, self.show_message)
                 if cmd is not None:
                     if msg == WM_ENDSESSION and self.on_session_end is not None:
@@ -137,21 +182,13 @@ class MessageWindow(threading.Thread):  # pragma: no cover - Windows only
             log.error("CreateWindowExW failed: %s", ctypes.get_last_error())
             self.ready.set()
             return
-        if self.hotkey is not None:
-            self.hotkey_ok = bool(
-                user32.RegisterHotKey(
-                    self.hwnd, HOTKEY_ID, self.hotkey.modifiers | MOD_NOREPEAT, self.hotkey.vk
-                )
-            )
-            if not self.hotkey_ok:
-                log.warning("RegisterHotKey(%s) failed: %s", self.hotkey.text,
-                            ctypes.get_last_error())  # fmt: skip
+        register(self.setting)
         self.ready.set()
         msg = wintypes.MSG()
         while user32.GetMessageW(ctypes.byref(msg), None, 0, 0) > 0:
             user32.TranslateMessage(ctypes.byref(msg))
             user32.DispatchMessageW(ctypes.byref(msg))
-        if self.hotkey_ok:
+        if self.active is not None:
             user32.UnregisterHotKey(self.hwnd, HOTKEY_ID)
 
     def stop(self) -> None:

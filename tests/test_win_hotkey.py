@@ -23,8 +23,15 @@ def test_message_window_translates_posted_messages():
         if len(got) == 6:
             done.set()
 
-    w = MessageWindow(None, on_command, show_message=0xC123, on_session_end=lambda: ended.append(1))
-    assert w.start_and_wait() is False  # no hotkey requested
+    results = []
+    w = MessageWindow(
+        "Off",
+        on_command,
+        on_hotkey=results.append,
+        show_message=0xC123,
+        on_session_end=lambda: ended.append(1),
+    )
+    assert w.start_and_wait() is None  # shortcut Off: nothing registered
     assert w.hwnd
     user32 = ctypes.WinDLL("user32")
     user32.PostMessageW.argtypes = [wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM]
@@ -39,6 +46,13 @@ def test_message_window_translates_posted_messages():
         assert user32.PostMessageW(w.hwnd, msg, wp, 0)
     assert done.wait(5), got
     assert got == ["toggle", "suspend", "resume", "resume", "display_changed", "show"]
+    # Live re-register: an unusual combo is almost certainly free on the runner.
+    w.reregister("Ctrl+Alt+Shift+F11")
+    for _ in range(50):
+        if results:
+            break
+        threading.Event().wait(0.1)
+    assert results and results[0] in ("Ctrl+Alt+Shift+F11", "Ctrl+Alt+Shift+M", None)
     w.stop()
     w.join(5)
     assert not w.is_alive()

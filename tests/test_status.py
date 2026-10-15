@@ -105,10 +105,11 @@ def test_add_same_warning_replaces():
 def test_tray_icon_and_tooltip():
     m = StatusModel()
     assert m.tray_icon() == "idle"
-    assert m.tray_tooltip("0.1.0") == "MouseMusic v0.1.0 — Stopped"
+    assert m.tray_tooltip("0.1.0") == "MouseMusic v0.1.0 — Stopped · Ctrl+Alt+M"
+    assert StatusModel(hotkey_ok=False).tray_tooltip("0.1.0") == "MouseMusic v0.1.0 — Stopped"
     m.on_started(GS)
     assert m.tray_icon() == "playing"
-    assert m.tray_tooltip("0.1.0") == "MouseMusic v0.1.0 — Playing"
+    assert m.tray_tooltip("0.1.0") == "MouseMusic v0.1.0 — Playing · Ctrl+Alt+M"
     m.add_warning("W1", "x", 0)
     assert m.tray_icon() == "playing"  # warnings keep the icon
     m.set_error("E4", "lost")

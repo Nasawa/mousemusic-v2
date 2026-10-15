@@ -97,7 +97,7 @@ BUILTIN_INSTRUMENT_SETS: dict[str, InstrumentSet] = {
         InstrumentSet("mellow", "Mellow", (4, 11, 10, 108, 46, 88)),
         InstrumentSet("percussive", "Percussive", (8, 9, 12, 13, 14, 108, 114)),
         InstrumentSet("single_piano", "Piano only", (0,)),
-        InstrumentSet("full_gm", "All 128 GM", tuple(range(128))),
+        InstrumentSet("full_gm", "Full GM library", tuple(range(128))),
     )
 }
 BUILTIN_DEFAULT_SET = "classic"

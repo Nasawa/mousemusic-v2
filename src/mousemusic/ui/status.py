@@ -182,7 +182,10 @@ class StatusModel:
             "playing": strings.TRAY_TOOLTIP_PLAYING,
             "idle": strings.TRAY_TOOLTIP_STOPPED,
         }[state]
-        return template.format(version=version)
+        text = template.format(version=version)
+        if state != "error" and self.hotkey_ok:
+            text += strings.TRAY_TOOLTIP_SHORTCUT.format(hotkey=self.hotkey)
+        return text
 
     def hotkey_hint(self) -> str:
         return self.hotkey if self.hotkey_ok else strings.SHORTCUT_OFF

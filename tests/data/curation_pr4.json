@@ -42,6 +42,6 @@
     {"id": "single_piano", "label": "Piano only", "programs": [
       {"program": 0, "name": "Acoustic Grand Piano", "reason": "One row, so only pitch is heard. Best for learning X first."}
     ]},
-    {"id": "full_gm", "label": "All 128 GM", "programs": "0..127", "reason": "v1 behaviour, kept for completeness. Many slow or noisy programs."}
+    {"id": "full_gm", "label": "Full GM library", "programs": "0..127", "reason": "v1 behaviour, kept for completeness. Many slow or noisy programs."}
   ]
 }
