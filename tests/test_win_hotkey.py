@@ -92,10 +92,13 @@ def test_a2_message_window_exists_without_hotkey(setting):
         user32.PostMessageW.argtypes = [
             wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM,
         ]  # fmt: skip
+        user32.SendMessageW.argtypes = user32.PostMessageW.argtypes
+        user32.SendMessageW.restype = ctypes.c_ssize_t
         name = ctypes.create_unicode_buffer("ImmersiveColorSet")
         user32.PostMessageW(w.hwnd, hk.WM_POWERBROADCAST, hk.PBT_APMRESUMESUSPEND, 0)
-        user32.PostMessageW(w.hwnd, hk.WM_SETTINGCHANGE, hk.SPI_SETHIGHCONTRAST, 0)
-        user32.PostMessageW(w.hwnd, hk.WM_SETTINGCHANGE, 0, ctypes.addressof(name))
+        # WM_SETTINGCHANGE can't be posted (ERROR_MESSAGE_SYNC_ONLY); Windows sends it too.
+        user32.SendMessageW(w.hwnd, hk.WM_SETTINGCHANGE, hk.SPI_SETHIGHCONTRAST, 0)
+        user32.SendMessageW(w.hwnd, hk.WM_SETTINGCHANGE, 0, ctypes.addressof(name))
         assert _wait(lambda: len(got) >= 3), got
         assert got[:3] == ["resume", "theme_changed", "theme_changed"]
     finally:
