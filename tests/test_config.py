@@ -50,6 +50,7 @@ SPEC_DEFAULTS = {
     "taskbar_secondary_programs": [8, 108, 9],
     "taskbar_tray": True,
     "taskbar_tray_slot_dip": 32,
+    "cell_width_dip": 0,  # phase 2 (CG-S4)
 }
 
 
