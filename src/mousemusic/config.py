@@ -56,6 +56,7 @@ TASKBAR_OFFSET_DIP_RANGE = (0, 400)
 TASKBAR_SECONDARY_MAX = 8
 TASKBAR_MONITORS = ("primary", "all")
 TASKBAR_SLOT_SOURCES = ("auto", "uia", "fixed")
+CELL_WIDTH_DIP_RANGE = (16, 400)  # 0 = off (one column per note, the v1 mapping)
 
 #: Migrations from older schemas, ``{from_version: fn(raw) -> raw}``, applied in order (OQ-9).
 #: Empty while schema 1 is the only version; a file without ``schema`` is treated as 1.
@@ -98,6 +99,7 @@ class Settings:
     taskbar_secondary_programs: tuple[int, ...] = TASKBAR_SECONDARY_DEFAULT
     taskbar_tray: bool = True
     taskbar_tray_slot_dip: int = TASKBAR_TRAY_SLOT_DIP_DEFAULT
+    cell_width_dip: int = 0  # phase 2, file-only (CG-S4)
 
     def replace(self, **changes: Any) -> Settings:
         """A validated copy with ``changes`` applied (for UI updates)."""
@@ -200,6 +202,13 @@ def _programs(raw: Mapping[str, Any], key: str, issues: _Issues) -> tuple[int, .
             return tuple(nums)  # type: ignore[arg-type]
     issues.add(key, value, list(default))
     return default
+
+
+def _cell_width(raw: Mapping[str, Any], issues: _Issues) -> int:
+    """0 (off) or 16-400; other numbers clamp into 16-400, non-numbers → 0 + W3."""
+    if raw.get("cell_width_dip", 0) == 0 and not isinstance(raw.get("cell_width_dip"), bool):
+        return 0
+    return _int(raw, "cell_width_dip", *CELL_WIDTH_DIP_RANGE, issues)
 
 
 def _hotkey(raw: Mapping[str, Any], issues: _Issues) -> str:
@@ -315,6 +324,7 @@ def validate(raw: Mapping[str, Any]) -> tuple[Settings, list[str]]:
         taskbar_slot_source=_choice(raw, "taskbar_slot_source", TASKBAR_SLOT_SOURCES, issues),
         taskbar_secondary_programs=_programs(raw, "taskbar_secondary_programs", issues),
         taskbar_tray=_bool(raw, "taskbar_tray", issues),
+        cell_width_dip=_cell_width(raw, issues),
         taskbar_tray_slot_dip=_int(
             raw, "taskbar_tray_slot_dip", *TASKBAR_TRAY_SLOT_DIP_RANGE, issues
         ),

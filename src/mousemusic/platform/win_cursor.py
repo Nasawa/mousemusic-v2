@@ -93,6 +93,14 @@ class WinCursor:
             return None
         return pt.x, pt.y
 
+    def dpi_scale(self) -> float:
+        """System DPI / 96 for ``cell_width_dip`` (CG-S4); 1.0 if unavailable."""
+        try:
+            dpi = self._user32.GetDpiForSystem()
+        except (AttributeError, OSError):
+            return 1.0
+        return dpi / 96.0 if dpi else 1.0
+
     def _rect(self, x: int, y: int, w: int, h: int) -> Rect | None:
         try:
             return Rect(x, y, w, h)

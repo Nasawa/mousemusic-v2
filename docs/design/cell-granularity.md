@@ -278,3 +278,13 @@ and `taskbar_tray_slot_dip` defaults come from it.
 - **Q4 → resolved (custom icon sizes):** Christopher's taskbar uses Windhawk mods, so real icon rectangles come from UI
   Automation (`taskbar_slot_source: auto`), with fixed widths as the per-taskbar fallback (§4.2a).
 - **Q3 → resolved:** CG-G2 measures the pitches, and it is a gate. CG-S1 doesn't merge before it.
+
+## Implementation note (CG-S4)
+
+`cell_width_dip` (file-only, 0 = off, 16–400) is implemented. DIP→px uses the
+system DPI (`GetDpiForSystem`), so on mixed-DPI setups columns on secondary
+monitors are approximate. Columns are anchored at the desktop's left edge and
+the count is rounded so all columns stay equal (each within half a column of
+the request). Columns past the end of the scale wrap back to `low_note` and
+play at 0.7× velocity, as the taskbar wrap does. On the taskbar, the taskbar
+zone still overrides the desktop mapping.

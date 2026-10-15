@@ -37,6 +37,8 @@ from mousemusic.mapping import (
     ZoneMapper,
     build_grid,
     build_taskbar_sound,
+    cell_width_px,
+    fixed_width_grid,
 )
 from mousemusic.midi import DeviceLostError, MidiError, MidiOut, MidiOutput
 from mousemusic.scheduler import NoteParams, Scheduler
@@ -166,6 +168,15 @@ class Engine:
         return build_taskbar_sound(s.scale, s.root, s.taskbar_low_note, s.taskbar_high_note,
                                    s.taskbar_program, s.taskbar_secondary_programs)  # fmt: skip
 
+    def _desktop_grid(self, rect: Rect) -> Grid:
+        """Phase 2 ``cell_width_dip`` (CG-S4): fixed-width columns, scaled by the cursor
+        source's DPI scale (system DPI on Windows); 0 = one column per note (unchanged)."""
+        dip = self.settings.cell_width_dip
+        if not dip:
+            return self.grid
+        scale = getattr(self.cursor, "dpi_scale", lambda: 1.0)() or 1.0
+        return fixed_width_grid(self.grid, rect.w, cell_width_px(dip, scale))
+
     def _active_zones(self) -> tuple[TaskbarZone, ...]:
         return self.zones if self.settings.taskbar_mode else ()
 
@@ -233,7 +244,8 @@ class Engine:
         old = self.settings
         self.settings = settings
         self.scheduler.set_params(self._params(settings), now)
-        mapping_keys = ("scale", "root", "low_note", "high_note", "instrument_set", "screen_mode")
+        mapping_keys = ("scale", "root", "low_note", "high_note", "instrument_set", "screen_mode",
+                        "cell_width_dip")  # fmt: skip
         if any(getattr(old, k) != getattr(settings, k) for k in mapping_keys):
             self.grid = self._grid(settings)
             self.metrics_at = None
@@ -296,7 +308,8 @@ class Engine:
             return  # keep the last good rect
         if rect != self.rect or self.mapper is None:
             self.rect = rect
-            self.mapper = ZoneMapper(HysteresisMapper(self.grid, rect), self._active_zones())
+            self.mapper = ZoneMapper(HysteresisMapper(self._desktop_grid(rect), rect),
+                                     self._active_zones())  # fmt: skip
             self.cell = None
 
     def step(self, now: float) -> None:
@@ -332,8 +345,13 @@ class Engine:
                 if isinstance(cell, ZoneCell):
                     self._zone_note(cell, now)
                 else:
-                    note, program = self.grid.sound(cell)
-                    self.scheduler.request(note, program, now)
+                    grid = self.mapper.desktop.grid
+                    note, program = grid.sound(cell)
+                    factor = grid.factor(cell)
+                    velocity = (
+                        None if factor == 1.0 else max(1, round(self.settings.velocity * factor))
+                    )
+                    self.scheduler.request(note, program, now, velocity)
                     self.emit(Event("note", {"note": note, "program": program}))
         self.scheduler.tick(now)
 

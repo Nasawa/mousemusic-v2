@@ -42,6 +42,8 @@ class Grid:
 
     notes: tuple[int, ...]
     programs: tuple[int, ...]
+    #: Per-column velocity factor; empty = 1.0 everywhere (only set by fixed_width_grid).
+    factors: tuple[float, ...] = ()
 
     def __post_init__(self) -> None:
         if not self.notes:
@@ -60,6 +62,29 @@ class Grid:
     def sound(self, cell: Cell) -> tuple[int, int]:
         """``(note, program)`` for a cell."""
         return self.notes[cell.col], self.programs[cell.row]
+
+    def factor(self, cell: Cell) -> float:
+        return self.factors[cell.col] if self.factors else 1.0
+
+
+WRAP_FACTOR = 0.7  # wrapped cycles play softer so the wrap is audible (design §2 option B)
+
+
+def cell_width_px(dip: int, scale: float) -> int:
+    return max(1, round(dip * scale))
+
+
+def fixed_width_grid(grid: Grid, width: int, column_px: int) -> Grid:
+    """Phase 2 ``cell_width_dip`` (design §2 A + B): columns about ``column_px`` wide across
+    ``width`` px instead of one column per note. Column c plays the scale from ``low_note``
+    (``notes[c % n]``); every pass after the first wraps back to ``low_note`` and plays at
+    :data:`WRAP_FACTOR`. The column count is ``round(width / column_px)`` so columns stay
+    equal; each is within half a column of the requested width over the whole rect."""
+    cols = max(1, round(width / max(1, column_px)))
+    n = len(grid.notes)
+    notes = tuple(grid.notes[c % n] for c in range(cols))
+    factors = tuple(1.0 if c < n else WRAP_FACTOR for c in range(cols))
+    return Grid(notes, grid.programs, factors)
 
 
 def build_grid(scale: str, root: str, low_note: int, high_note: int, instrument_set: str) -> Grid:
