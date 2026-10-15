@@ -100,7 +100,8 @@ def test_a2_message_window_exists_without_hotkey(setting):
         user32.SendMessageW(w.hwnd, hk.WM_SETTINGCHANGE, hk.SPI_SETHIGHCONTRAST, 0)
         user32.SendMessageW(w.hwnd, hk.WM_SETTINGCHANGE, 0, ctypes.addressof(name))
         assert _wait(lambda: len(got) >= 3), got
-        assert got[:3] == ["resume", "theme_changed", "theme_changed"]
+        # Sent messages are dispatched before queued (posted) ones, so order may vary.
+        assert sorted(got[:3]) == ["resume", "theme_changed", "theme_changed"]
     finally:
         w.stop()
         w.join(5)
