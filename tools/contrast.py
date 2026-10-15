@@ -2,31 +2,67 @@
 
 PALETTE = {
     "light": {
-        "bg": "#F3F3F3", "surface": "#FFFFFF", "text": "#1B1B1B", "text_secondary": "#5C5C5C",
-        "border": "#8A8A8A", "accent": "#4F46E5", "on_accent": "#FFFFFF", "focus": "#4F46E5",
-        "disabled_text": "#9E9E9E", "track": "#8A8A8A", "thumb": "#4F46E5",
-        "select_bg": "#4F46E5", "select_fg": "#FFFFFF", "link": "#4338CA",
-        "dot_idle": "#6B6B6B", "dot_ok": "#15803D", "warn": "#A14A06", "error": "#B91C1C",
+        "bg": "#F3F3F3",
+        "surface": "#FFFFFF",
+        "text": "#1B1B1B",
+        "text_secondary": "#5C5C5C",
+        "border": "#8A8A8A",
+        "accent": "#4F46E5",
+        "on_accent": "#FFFFFF",
+        "focus": "#4F46E5",
+        "disabled_text": "#9E9E9E",
+        "track": "#8A8A8A",
+        "thumb": "#4F46E5",
+        "select_bg": "#4F46E5",
+        "select_fg": "#FFFFFF",
+        "link": "#4338CA",
+        "dot_idle": "#6B6B6B",
+        "dot_ok": "#15803D",
+        "warn": "#A14A06",
+        "error": "#B91C1C",
     },
     "dark": {
-        "bg": "#202020", "surface": "#2D2D2D", "text": "#F3F3F3", "text_secondary": "#B8B8B8",
-        "border": "#8A8A8A", "accent": "#5B54E8", "on_accent": "#FFFFFF", "focus": "#A5A0FF",
-        "disabled_text": "#6E6E6E", "track": "#8A8A8A", "thumb": "#A5A0FF",
-        "select_bg": "#4F46E5", "select_fg": "#FFFFFF", "link": "#A5A0FF",
-        "dot_idle": "#A3A3A3", "dot_ok": "#4ADE80", "warn": "#FBBF24", "error": "#F87171",
+        "bg": "#202020",
+        "surface": "#2D2D2D",
+        "text": "#F3F3F3",
+        "text_secondary": "#B8B8B8",
+        "border": "#8A8A8A",
+        "accent": "#5B54E8",
+        "on_accent": "#FFFFFF",
+        "focus": "#A5A0FF",
+        "disabled_text": "#6E6E6E",
+        "track": "#8A8A8A",
+        "thumb": "#A5A0FF",
+        "select_bg": "#4F46E5",
+        "select_fg": "#FFFFFF",
+        "link": "#A5A0FF",
+        "dot_idle": "#A3A3A3",
+        "dot_ok": "#4ADE80",
+        "warn": "#FBBF24",
+        "error": "#F87171",
     },
 }
 
 # (foreground token, background token, minimum ratio, kind)
 PAIRS = [
-    ("text", "bg", 4.5, "text"), ("text", "surface", 4.5, "text"),
-    ("text_secondary", "bg", 4.5, "text"), ("text_secondary", "surface", 4.5, "text"),
-    ("on_accent", "accent", 4.5, "text"), ("select_fg", "select_bg", 4.5, "text"),
-    ("link", "bg", 4.5, "text"), ("warn", "bg", 4.5, "text"), ("error", "bg", 4.5, "text"),
-    ("border", "surface", 3.0, "ui"), ("border", "bg", 3.0, "ui"),
-    ("focus", "bg", 3.0, "ui"), ("focus", "surface", 3.0, "ui"),
-    ("track", "bg", 3.0, "ui"), ("thumb", "bg", 3.0, "ui"), ("accent", "bg", 3.0, "ui"),
-    ("dot_idle", "bg", 3.0, "ui"), ("dot_ok", "bg", 3.0, "ui"),
+    ("text", "bg", 4.5, "text"),
+    ("text", "surface", 4.5, "text"),
+    ("text_secondary", "bg", 4.5, "text"),
+    ("text_secondary", "surface", 4.5, "text"),
+    ("on_accent", "accent", 4.5, "text"),
+    ("select_fg", "select_bg", 4.5, "text"),
+    ("link", "bg", 4.5, "text"),
+    ("warn", "bg", 4.5, "text"),
+    ("error", "bg", 4.5, "text"),
+    ("border", "surface", 3.0, "ui"),
+    ("border", "bg", 3.0, "ui"),
+    ("focus", "bg", 3.0, "ui"),
+    ("focus", "surface", 3.0, "ui"),
+    ("track", "bg", 3.0, "ui"),
+    ("thumb", "bg", 3.0, "ui"),
+    ("accent", "bg", 3.0, "ui"),
+    ("dot_idle", "bg", 3.0, "ui"),
+    ("dot_ok", "bg", 3.0, "ui"),
     ("disabled_text", "bg", 0.0, "exempt"),
 ]
 
@@ -51,7 +87,8 @@ def main() -> int:
             ok = r >= need
             bad += not ok
             res = "exempt (disabled)" if kind == "exempt" else ("pass" if ok else "**FAIL**")
-            print(f"| {theme} | `{fg}` {p[fg]} | `{bg}` {p[bg]} | {r:.2f}:1 | {need or '—'} | {res} |")
+            pair = f"`{fg}` {p[fg]} | `{bg}` {p[bg]}"
+            print(f"| {theme} | {pair} | {r:.2f}:1 | {need or '—'} | {res} |")
     return 1 if bad else 0
 
 
