@@ -443,3 +443,9 @@ binding. Where one overlaps an earlier section, this section wins.
 | S-1 | **Ratified.** Volume changes merge to one CC7 per tick, latest wins (= A-5). |
 | S-2 | **Ratified.** After wake, the device is reopened only if it was playing before sleep; otherwise it stays closed until Start (= A-1, OQ-3). |
 | S-3 | **Ratified, settled by #19 and supersedes OQ-5.** Try the configured hotkey, then fall back to `Ctrl+Alt+Shift+M` (W7). W4 only if both fail. `Off` disables it. `hotkey` is now editable in the UI (Shortcut row) and validated; invalid → default + W3. |
+
+### Cell granularity (issue #16)
+
+| # | Decision |
+|---|---|
+| CG | **Proposed** in [docs/design/cell-granularity.md](docs/design/cell-granularity.md): an optional taskbar zone (`taskbar_mode`, default off). One column per taskbar icon slot (48 DIP × the taskbar monitor's DPI), aligned to the taskbar's left edge from `ABM_GETTASKBARPOS`, with its own instrument (`taskbar_program`). It wraps octaves past `taskbar_high_note`. The desktop mapping is unchanged. Targets left-aligned icons on a bottom taskbar (Windows 11 can't dock left). Pitch bend rejected. A fixed desktop `cell_width_dip` is phase 2. |
