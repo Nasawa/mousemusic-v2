@@ -70,7 +70,7 @@ Tools: loopMIDI (virtual port), VirtualMIDISynth (alternative synth), MIDI-OX or
 | DM-11 | Hot-plug | While playing, unplug the secondary monitor, then plug it back | Within ~2 s (or on `WM_DISPLAYCHANGE`) the mapping uses the new rect. No exception (§9) | M + A (fake metrics changing mid-path, G2) |
 | DM-12 | Resolution / scale change at runtime | Change the scale 100%→150% in Settings while it's running | Mapping recomputed. Tk window still crisp (P2 AC) | M |
 | DM-13 | `screen_mode: primary` | Set `primary` on E3 and move onto the secondary | Cursor clamped to the primary rect (§5.1) | A + M |
-| DM-14 | UI crispness | E2 @100/150/200% | Window isn't blurry. Fits within ≤ 360×300 logical (P1/P2) | M |
+| DM-14 | UI crispness | E2 @100/150/200% | Window isn't blurry. Minimum 340 × 360 logical px, with the status line allowed to grow past that (§11 Q-D1). See TH-10 | M |
 
 ## 4. Stuck notes (§2 item 4, §5 "Stop / Quit / device change / exception", §6 shutdown, §9 "Stuck notes")
 
@@ -88,12 +88,13 @@ with legato **off** and **on** (legato holds notes indefinitely, so it's the wor
 | SN-07 | Hard kill | Hold a legato note and run `taskkill /F /IM MouseMusic.exe` | The note stops. WinMM resets when the process closes the handle (§9). Also run it on loopMIDI→DAW. A downstream stuck note there is an **accepted limitation**: record it, don't block on it. The README `#no-sound` must describe the workaround (§11 OQ-2) | M (non-blocking) |
 | SN-08 | Logoff / shutdown | Hold a note and sign out | `WM_ENDSESSION` path silences the output (§9) | M |
 | SN-09 | Sleep while playing | Playing (legato on, note held). Start → Sleep, then wake | On suspend: full silence path (note-off → CC123 → reset) and device closed. On resume: device reopened and playback **resumes** (§11 OQ-3). No drone at any point | M |
-| SN-09a | Sleep while stopped | Stopped. Sleep, then wake | Device reopened (or left closed until Start) but playback does **not** start. No sound on wake (§11 OQ-3) | M |
+| SN-09a | Sleep while stopped | Stopped. Sleep, then wake | The device stays **closed** until Start (MIDI-OX or loopMIDI shows no open). Playback does not start. No sound on wake (§11 A-1, S-2) | A + M |
 | SN-09b | Resume reopen fails | Playing via loopMIDI. Sleep, delete the port (or unplug the USB device) while asleep, wake | E4 shown. App stopped. No crash (§11 OQ-3) | M |
 | SN-09c | Suspend/resume commands (unit) | Post `suspend`/`resume` commands to the engine with a fake MIDI device, both playing and stopped. Also resume with open failing | Exact silence sequence plus close on suspend. Was-playing flag honoured. E4 on failure. Commands handled on the engine thread (§6, §11 OQ-3) | A |
-| SN-09d | Broadcast plumbing | Send `WM_POWERBROADCAST`/`PBT_APMSUSPEND` and `PBT_APMRESUMEAUTOMATIC` to the hotkey thread's message window (e.g. with a `PostMessage` test harness, or `pwrtest /sleep` from the WDK) | Commands posted to the engine (§11 OQ-3) | A-win / M |
+| SN-09d | Broadcast plumbing | Send `WM_POWERBROADCAST`/`PBT_APMSUSPEND` and `PBT_APMRESUMEAUTOMATIC` to the hotkey thread's message window (e.g. with a `PostMessage` test harness, or `pwrtest /sleep` from the WDK) | Commands posted to the engine. Both `PBT_APMRESUMEAUTOMATIC` and `PBT_APMRESUMESUSPEND` mean resume, and repeats are idempotent (§11 A-1) | A-win / M |
+| SN-09g | Message window with no hotkey | Set `hotkey` to `Off`, **and** separately make both Ctrl+Alt+M and Ctrl+Alt+Shift+M fail (W4). Then send the suspend/resume, `WM_ENDSESSION` and `WM_SETTINGCHANGE` (theme) messages | The message window and its thread exist anyway. Power, session and theme handling still work. Required test (§11 A-2) | A-win + M |
 | SN-09e | Repeated sleep cycles | Run 5 sleep/wake cycles while playing, then check handles | Handle and thread counts stable (ties to the §11 OQ-7 limits) | M |
-| SN-09f | Modern Standby / hibernate | Repeat SN-09 on a Modern Standby (S0) laptop and with Hibernate | Record the behaviour. See ambiguity A-1 | M |
+| SN-09f | Modern Standby / hibernate | Repeat SN-09 on a Modern Standby (S0) laptop and with Hibernate | Hibernate takes the same path as sleep. On S0, no suspend may arrive at all, which is acceptable: the engine keeps running and if a send fails, E4 applies. Record the behaviour, non-blocking (§11 A-1) | M (non-blocking) |
 | SN-10 | Device lost while sounding | See MD-09/MD-10 | No drone on the remaining or reattached device | M |
 | SN-11 | Rapid start/stop | Toggle the hotkey 50× fast while moving | No stuck notes. No exceptions (G2 edge case) | A + M |
 | SN-12 | Note-length expiry | `note_length_ms=250`, legato off, cursor still | Note-off about 250 ms after note-on, within one tick (8 ms at 125 Hz) (§6) | A |
@@ -109,7 +110,7 @@ with legato **off** and **on** (legato holds notes indefinitely, so it's the wor
 | SD-03 | Checksums | `Get-FileHash -Algorithm SHA256` on both artifacts | Matches `SHA256SUMS.txt` | M |
 | SD-04 | Defender realtime | E5 with Defender on: download, run, use for 5 min | Not quarantined. No detection in Protection history | M |
 | SD-05 | Defender manual scan | `MpCmdRun.exe -Scan -ScanType 3 -File <exe>` and the same on the extracted zip | No threats | M |
-| SD-06 | VirusTotal | Upload the exe and the zip | Record the detection count and vendor names in the release PR. **Gate:** ≤ 3 detections **and** zero from Microsoft Defender, for the exe and the zip separately. Otherwise it blocks until a false-positive submission clears it or the build changes (§11 OQ-4) | M (blocking) |
+| SD-06 | VirusTotal | Upload the exe and the zip | Record the detection count and vendor names in the release PR. **Gate:** ≤ 3 detections **and** zero from Microsoft Defender, for the exe and the zip separately. The zip's count is what VirusTotal reports for the zip itself. A Defender hit on **any file inside** the zip also blocks (§11 A-8). Otherwise it blocks until a false-positive submission clears it or the build changes (§11 OQ-4) | M (blocking) |
 | SD-07 | UPX disabled | Inspect the spec (`upx=False`). Check the exe for UPX section names | No UPX (§7) | M (review) |
 | SD-08 | Onefile extraction | Launch the onefile exe and watch `%TEMP%\_MEI*` | Extracted on launch and removed after a clean Quit. Startup < 3 s on a clean VM (S7 AC) | M |
 | SD-09 | `_MEI` cleanup after a kill | `taskkill /F`, then check `%TEMP%` | Record whether a `_MEI*` dir is left behind (known PyInstaller behaviour). Not blocking unless it grows on every run | M |
@@ -146,7 +147,7 @@ Targets come from §1/§5/§6/§9, the S5/S7 acceptance criteria, and **§11 OQ-
 | LT-05 | Bluetooth output | LT-03 on a Bluetooth headset | Record it. Expected to be worse (§9) | M (G4) |
 | LT-06 | CPU idle and playing | Process Explorer, 5 min stopped and 5 min continuous sweeping | ≈ 0% stopped. < 2% playing (S5 AC) | M |
 | LT-07 | Timer period released | `powercfg /energy` (or check the timer resolution) after Stop | 1 ms period not held while stopped (§6) | M |
-| LT-08 | 30-min soak | Scripted or manual continuous movement for 30 min | Sample the working set, handles, threads and CPU at 2 min (baseline) and at 30 min: WS ≤ baseline + 10 MB, handles ≤ baseline + 50, thread count unchanged, CPU < 2 %. Blocking (§11 OQ-7) | M |
+| LT-08 | 30-min soak | Scripted or manual continuous movement for 30 min | Sample the working set, handles, threads and CPU at 2 min (baseline) and at 30 min: WS ≤ baseline + 10 MB, handles ≤ baseline + 50, long-lived thread count (main/Tk, engine, tray, message window) unchanged, CPU < 2 %. Transient threads (balloons, save debounce) are excluded but must exit: after 10 s idle at the end, the total thread count equals the 2-min baseline. Blocking (§11 OQ-7, A-7) | M |
 | LT-09 | Startup time | E5, cold and warm, onefile and onedir | < 3 s (S7 AC) | M |
 
 ## 7. Settings corruption and persistence (§4, S3)
@@ -161,7 +162,7 @@ Targets come from §1/§5/§6/§9, the S5/S7 acceptance criteria, and **§11 OQ-
 | SC-06 | Out-of-range clamping | Each key independently, below and above its bounds: `velocity` (1–127), `note_length_ms` (50–2000), `poll_hz` (30–250), `low_note`/`high_note` (0–127), `volume` (0–100). Also each exact boundary | Clamped to the bound, independently per key (§11 OQ-8) | A |
 | SC-06a | Narrow / inverted range | `(60,65)` → `(60,72)`. `(120,100)` → `(120,127)` → then `low=115`. `(127,127)` → `(115,127)`. `(0,0)` → `(0,12)`. `(-5,300)` → `(0,127)` | Matches the §11 OQ-8 rule: keep low, `high=min(127,low+12)`, then `low=high-12` if still < 12 | A |
 | SC-07 | Unknown keys | Add `"foo": 1` | Ignored (§4) | A |
-| SC-08 | Unknown enum | `scale: "lydian"`, `instrument_set: "x"`, `screen_mode: "y"` | Reset to the default with W3 (§11 OQ-8) | A |
+| SC-08 | Unknown enum | `scale: "lydian"`, `instrument_set: "x"`, `screen_mode: "y"`, `theme: "blue"`, `theme: 1` | Reset to the default with W3; `theme` → `system` (§11 OQ-8, Q-D2) | A |
 | SC-09 | Wrong top-level type / BOM / non-UTF-8 | `[]`, a UTF-8 BOM, Latin-1 bytes | No crash. Corrupt path or parsed tolerantly; record which | A |
 | SC-10 | Future schema | `"schema": 99` with known and unknown keys | Known keys loaded and validated. File **not rewritten** (byte-identical after launch and Quit with no changes). Warning in the log, no UI message. After a user change, the save writes the current schema (§11 OQ-9) | A + M |
 | SC-10a | Old / missing schema | Remove `schema`, or set it lower than current | Migrations run in order (§11 OQ-9) | A |
@@ -185,9 +186,9 @@ file-only and fixed for every note-on.
 | ID | Case | Steps | Expected | Type |
 |---|---|---|---|---|
 | VO-01 | Default | No settings file | `volume` = 80. First CC7 value = 102 | A |
-| VO-02 | Scaling formula | Table: 0→0, 1→1, 50→64, 79→100, 80→102, 99→126, 100→127 | `round(v*127/100)`. Note Python's banker's rounding: 50 → 63.5 → **64** (even), so check the implementation matches (see A-3) | A |
+| VO-02 | Scaling formula | Table: 0→0, 1→1, 50→64, 79→100, 80→102, 99→126, 100→127 | `round(v*127/100)`. Half-up is the intent. For integers 0–100 the only .5 case is 50 → 64 under either rule, so no code change (§11 A-3) | A |
 | VO-03 | Range validation | `-1`, `101`, `1000`, `0`, `100` | Clamped to 0–100 (§11 OQ-8) | A |
-| VO-04 | Wrong type | `"loud"`, `null`, `[]`, `true`, `55.5` | Default 80 with W3 for non-numbers. Behaviour for float/bool: see A-4 | A |
+| VO-04 | Wrong type | `"loud"`, `null`, `[]`, `true`, `55.5` | `bool`, string, null, list → 80 + W3. A finite float is rounded, then clamped (55.5 → 56). NaN/inf → 80 + W3. The same rule applies to every integer setting (§11 A-4) | A |
 | VO-05 | Missing key only | Valid file without `volume` | 80, and other keys kept | A |
 | VO-06 | Corruption fallback | Malformed file | `.bak` + defaults → volume 80 (§4, §11 OQ-10) | A |
 | VO-07 | When CC7 is sent | Fake MIDI: open, Start, slider change while stopped, slider change while playing, device change, Reconnect, resume from sleep | CC7 on channel 0 at open, at Start and on each change. Never on channel 9. Sent through the engine thread (§6) | A |
@@ -196,8 +197,38 @@ file-only and fixed for every note-on.
 | VO-10 | Effect on a virtual port | loopMIDI → MIDI-OX | CC7 `B0 07 xx` values match VO-02 | M |
 | VO-11 | Persistence | Set 37, wait > 500 ms, Quit, relaunch | `volume: 37` in the file. Slider shows 37. First CC7 = 47 | A + M |
 | VO-12 | Debounced writes | Drag the slider quickly | CC7 sent live. One file write about 500 ms after the last change (§4) | A |
-| VO-13 | Rate of CC7 while dragging | Drag the slider fast while playing | No audible glitch or stall. Count the CC7s sent (see A-5) | M |
+| VO-13 | Rate of CC7 while dragging | Drag the slider fast while playing | No audible glitch or stall. At most one CC7 per tick (≤ 125/s), latest value wins. File save still debounced at 500 ms (§11 A-5, S-1) | A + M |
 | VO-14 | Keyboard access | Arrow keys on the slider | Changes the volume (P2) | M |
+
+## 7b. Theme / dark mode (§4 `theme`, §11 Q-D1–Q-D4, docs/ux.md §11 via PR #22)
+
+Status: the spec is accepted (§4, §11), but on `main` at 54ba2fe **there's no `theme` in the code yet** (no setting, no Theme row, window minimum 340×330). These cases are written against the spec and PR #22's ux §11, and become runnable when it's implemented.
+
+| ID | Case | Steps | Expected | Type |
+|---|---|---|---|---|
+| TH-01 | Default | No settings file | `theme` = `system`. No schema bump (`schema` stays 1) (§4, Q-D2) | A |
+| TH-02 | Validation | `"light"`, `"dark"`, `"system"`, `"Dark"`, `"blue"`, `1`, `null`, `true` | The three exact values are kept. Anything else → `system` + W3. Note: case-sensitivity is unspecified, see B-1 | A |
+| TH-03 | Older build ignores the key | Load a file with `theme` in an older build (or `validate` with an unknown key) | Ignored, no W3 (§4 unknown keys) | A |
+| TH-04 | System resolution | Windows Settings → Personalization → Colors: Light, then Dark, with `theme: system` | App palette follows `AppsUseLightTheme` | M |
+| TH-05 | Live follow | Switch Windows Light↔Dark with the app open (window visible and hidden) | Repaints without a restart (`WM_SETTINGCHANGE` "ImmersiveColorSet", with `<FocusIn>` as a backup, per PR #22). Title bar turns dark too (DWM attribute 20/19) | M |
+| TH-06 | Override | Pick Dark in the Theme row while Windows is Light, and the reverse | Override wins, applies live, and persists across a restart | A (controller) + M |
+| TH-07 | High contrast | Turn on a contrast theme (Settings → Accessibility → Contrast themes) | High contrast overrides `theme`: system colours are used and the palette is off (§4) | M |
+| TH-08 | Combobox popdowns | Dark mode: open each dropdown | Popdown list is dark and readable, including after a live switch (PR #22) | M |
+| TH-09 | Tray menu | Dark mode: right-click the tray icon | Menu stays the light system default. That's expected, not a bug (§11 Q-D3) | M |
+| TH-10 | Contrast | Run `tools/contrast.py` if present, or inspect palette tokens | Text ≥ 4.5:1, UI/focus ≥ 3:1, disabled controls exempt (PR #22) | A |
+| TH-11 | Status colours in dark | Trigger W3/W4/E4 in dark mode | Amber/red dots and text legible | M |
+| TH-12 | No new dependency | Check `requirements.txt` | No `sv-ttk`. Stays on stdlib `clam` (§11 Q-D4) | A (review) |
+| TH-13 | Theme broadcast without a hotkey | Covered by SN-09g | Theme change still followed with the hotkey `Off` or after W4 (§11 A-2) | A-win + M |
+
+### Minimum window size (§11 Q-D1)
+
+| ID | Case | Steps | Expected | Type |
+|---|---|---|---|---|
+| WS-01 | Minimum at 100 % | Launch with short status text | Client area 340 × 360 logical px (Shortcut + Theme rows). Width fixed at 340 | A (window test) + M |
+| WS-02 | Grows for long warnings | Trigger the two-key W4 (both shortcuts taken) | Height > 360 so every wrapped line is visible. Shrinks back to 360 once it clears | A + M |
+| WS-03 | DPI scaling | 150 % and 200 % | Size scales (≈ 510 × 540 and 680 × 720 physical). Nothing clipped | M |
+| WS-04 | Small screens | 1366 × 768 @ 125 %, plus the longest warning | Window still fits on screen. See B-2 | M |
+| WS-05 | Saved position near the bottom edge | `window_y` close to the bottom of the work area, then grow | Whether the window is moved back on screen is unspecified, see B-3 | M |
 
 ## 8. Other §9 risks
 
@@ -249,7 +280,9 @@ release. File an issue with repro steps.
 
 **Settings**
 - [ ] Corrupt file → `.bak` + defaults on the real exe (SC-02). Persistence across restart (SC-17). Portable mode (SC-15). Unwritable → W5 (SC-16)
-- [ ] Hotkey conflict → W4 + `(shortcut off)` (SD-13)
+- [ ] Hotkey conflict → W7 fallback, then W4 + `(shortcut off)` when both are taken (SD-13)
+- [ ] Dark mode and minimum window size (TH-04–TH-09, WS-01–WS-02)
+- [ ] Christopher's quick pass: [`rc-manual-checklist.md`](rc-manual-checklist.md)
 
 **Docs and UX**
 - [ ] README walk-through: download → sound in ≤ 2 min, timed: ___ (P4 AC)
@@ -257,15 +290,15 @@ release. File an issue with repro steps.
 
 Sign-off: Grace · date · build SHA · verdict (GO / NO-GO)
 
-## 10. Remaining ambiguities
+## 10. Resolved and remaining ambiguities
 
-§11 answers OQ-1–OQ-12. The text that replaced each placeholder cites the decision. These points still need a call:
+A-1 – A-8 were answered in **§11** (commit 5ef93d1) and are applied in the cases above: A-1 → SN-09a/09d/09f; A-2 → SN-09g/TH-13; A-3 → VO-02; A-4 → VO-04; A-5 → VO-13; A-6 → see below; A-7 → LT-08; A-8 → SD-06.
 
-- **A-1 Sleep variants:** §11 OQ-3 names `PBT_APMSUSPEND`/`PBT_APMRESUMEAUTOMATIC` only. On Modern Standby (S0) machines these may not arrive the same way, and it's unspecified whether hibernate and a resume via `PBT_APMRESUMESUSPEND` without `…AUTOMATIC` are covered. It's also unclear whether a resume while **stopped** reopens the device or leaves it closed until Start.
-- **A-2 Suspend/resume vs the hotkey failing:** the broadcast is received by the hotkey thread's message window. If `RegisterHotKey` fails (W4), does that window and thread still exist, so sleep handling still works?
-- **A-3 CC7 rounding:** `round(volume*127/100)` in Python uses round-half-to-even (50 → 64, but in general .5 cases go to even). The spec should say whether that's intended or whether half-up is meant.
-- **A-4 Types:** is a float (`55.5`) or a bool (`true`, which is a subclass of int in Python) a "wrong type" (→ default + W3) or a number to clamp/round?
-- **A-5 CC7 rate:** "on every change" while dragging could send dozens of CC7s per second. Should they go through the engine command queue and be coalesced per tick?
-- **A-6 W/E codes:** W1, W3–W6 and E4 are defined in `docs/ux.md`, not in ARCHITECTURE. The tests assume the copy there. If the UX doc changes, these cases need updating.
-- **A-7 Soak baseline:** it's unclear whether "constant thread count" includes the transient threads from pystray balloons or the debounce timer.
-- **A-8 VirusTotal for the zip:** "the zip follows the same rule". VT scans archive members, so does a Defender hit on an inner file count?
+**A-6 (§11):** user-facing W/E codes and copy are owned by `docs/ux.md`. ARCHITECTURE only defines when they trigger. Test cases reference codes by ID (W1, W3, W4, W7, E2, E4, …). Copy changes go through a ux.md PR that updates the tests in the same PR.
+
+Still open (new):
+- **B-1 Theme value case:** the hotkey is normalised case-insensitively. Is `"Dark"` valid for `theme`, or does it mean `system` + W3?
+- **B-2 Window height on small screens:** what should happen when 360 logical px plus a long warning doesn't fit the work area (for example 768 px at 150 %)?
+- **B-3 Growing near a screen edge:** when the window grows downward from a saved position near the bottom, should it be moved back into the work area?
+- **B-4 docs/ux.md §1** still says "340 × 300, fixed" and "≤ 360×300". It needs updating to the §11 Q-D1 minimum of 340 × 360 (maybe in PR #22).
+- **B-5 Instrument audition:** there's no CLI flag or preset to play one GM program directly. Checking a specific instrument (e.g. Banjo 105, New Age Pad 88) means moving to its row. A `--play-instrument N` (or `--dry-run`-style audition) flag would make the RC listen check one click.
