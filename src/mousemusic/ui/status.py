@@ -13,7 +13,8 @@ from mousemusic.instruments import program_name
 from mousemusic.ui import strings
 
 NORMAL, WARNING, ERROR = "normal", "warning", "error"
-GREY, GREEN, AMBER, RED = "#808080", "#16A34A", "#D97706", "#DC2626"
+# Semantic colour roles for the status dot; the window maps them to palette tokens (ux §11.4).
+ROLE_IDLE, ROLE_OK, ROLE_WARN, ROLE_ERROR = "idle", "ok", "warn", "error"
 
 #: W2/W3/W4/W5 minimum display time (docs/ux.md §4), seconds.
 WARNING_SECONDS = 15.0
@@ -42,7 +43,7 @@ def shorten(name: str, limit: int = DEVICE_MAX) -> str:
 @dataclass(frozen=True)
 class Status:
     dot: str
-    color: str
+    role: str
     text: str
     severity: str = NORMAL
     help_anchor: str | None = None
@@ -143,31 +144,35 @@ class StatusModel:
     def current(self, now: float) -> Status:
         self.expire(now)
         if self.error is not None:
-            return Status(strings.DOT_ERROR, RED, self.error.text, ERROR, self.error.help_anchor)
+            return Status(
+                strings.DOT_ERROR, ROLE_ERROR, self.error.text, ERROR, self.error.help_anchor
+            )
         if self.warnings:
             w = self.warnings[0]
-            return Status(strings.DOT_WARNING, AMBER, w.text, WARNING, w.help_anchor)
+            return Status(strings.DOT_WARNING, ROLE_WARN, w.text, WARNING, w.help_anchor)
         if self.reconnecting:
-            return Status(strings.DOT_NORMAL, GREY, strings.STATUS_RECONNECTING)
+            return Status(strings.DOT_NORMAL, ROLE_IDLE, strings.STATUS_RECONNECTING)
         if self.connecting:
             dev = self.device or ""
-            return Status(strings.DOT_NORMAL, GREY, strings.STATUS_CONNECTING.format(device=dev))
+            return Status(
+                strings.DOT_NORMAL, ROLE_IDLE, strings.STATUS_CONNECTING.format(device=dev)
+            )
         if self.playing:
             dev = shorten(self.device or "")
             if self.last_note is None:
-                return Status(strings.DOT_NORMAL, GREEN,
+                return Status(strings.DOT_NORMAL, ROLE_OK,
                               strings.STATUS_PLAYING_IDLE.format(device=dev))  # fmt: skip
             note, program = self.last_note
             text = strings.STATUS_PLAYING.format(
                 note=display_note(note, self.root), instrument=program_name(program), device=dev
             )
-            return Status(strings.DOT_NORMAL, GREEN, text)
+            return Status(strings.DOT_NORMAL, ROLE_OK, text)
         if self.first_run:
-            return Status(strings.DOT_NORMAL, GREY, strings.STATUS_FIRST_RUN)
+            return Status(strings.DOT_NORMAL, ROLE_IDLE, strings.STATUS_FIRST_RUN)
         if self.hotkey_ok:
-            return Status(strings.DOT_NORMAL, GREY,
+            return Status(strings.DOT_NORMAL, ROLE_IDLE,
                           strings.STATUS_STOPPED.format(hotkey=self.hotkey))  # fmt: skip
-        return Status(strings.DOT_NORMAL, GREY, strings.STATUS_STOPPED_NO_HOTKEY)
+        return Status(strings.DOT_NORMAL, ROLE_IDLE, strings.STATUS_STOPPED_NO_HOTKEY)
 
     def tray_icon(self) -> str:
         """``idle`` / ``playing`` / ``error`` (assets/icons/tray-<state>.ico)."""

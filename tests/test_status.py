@@ -2,11 +2,11 @@ import pytest
 
 from mousemusic.ui import strings
 from mousemusic.ui.status import (
-    AMBER,
     ERROR,
-    GREEN,
-    GREY,
-    RED,
+    ROLE_ERROR,
+    ROLE_IDLE,
+    ROLE_OK,
+    ROLE_WARN,
     WARNING,
     StatusModel,
     display_note,
@@ -33,7 +33,7 @@ def test_shorten():
 def test_stopped_and_first_run_and_no_hotkey():
     m = StatusModel()
     s = m.current(0)
-    assert (s.dot, s.color, s.text) == ("●", GREY, "Stopped — press Start or Ctrl+Alt+M")
+    assert (s.dot, s.role, s.text) == ("●", ROLE_IDLE, "Stopped — press Start or Ctrl+Alt+M")
     m.first_run = True
     assert m.current(0).text == strings.STATUS_FIRST_RUN
     m.first_run = False
@@ -50,7 +50,7 @@ def test_playing_flow_texts():
     assert m.current(0).text == "Connecting to Microsoft GS Wavetable Synth…"
     m.on_started(GS)
     s = m.current(0)
-    assert s.text == "Playing — move the mouse · Microsoft GS Wavetable…" and s.color == GREEN
+    assert s.text == "Playing — move the mouse · Microsoft GS Wavetable…" and s.role == ROLE_OK
     m.on_note(64, 11)
     assert m.current(0).text == "E4 · Vibraphone · Microsoft GS Wavetable…"
     assert not m.first_run and m.started_once
@@ -65,12 +65,12 @@ def test_precedence_error_warning_hint():
     m.add_warning("W1", "w1", 0)
     m.set_error("E1", "e1", "no-midi-device")
     s = m.current(0)
-    assert (s.dot, s.color, s.severity, s.help_anchor) == ("■", RED, ERROR, "no-midi-device")
+    assert (s.dot, s.role, s.severity, s.help_anchor) == ("■", ROLE_ERROR, ERROR, "no-midi-device")
     m.clear_error("E2")  # wrong id: stays
     assert m.current(0).text == "e1"
     m.clear_error("E1")
     s = m.current(0)
-    assert (s.dot, s.color, s.severity, s.text) == ("▲", AMBER, WARNING, "w1")
+    assert (s.dot, s.role, s.severity, s.text) == ("▲", ROLE_WARN, WARNING, "w1")
     m.clear_warning("W1")
     assert m.current(0).text == strings.STATUS_FIRST_RUN
 

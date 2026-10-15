@@ -22,6 +22,7 @@ from typing import Any
 from mousemusic.platform.hotkey import (
     MOD_NOREPEAT,
     WM_ENDSESSION,
+    WM_SETTINGCHANGE,
     Hotkey,
     candidates,
     register_first,
@@ -151,7 +152,10 @@ class MessageWindow(threading.Thread):  # pragma: no cover - Windows only
                     if self.on_hotkey is not None:
                         self.on_hotkey(self.active.text if self.active else None)
                     return 0
-                cmd = translate_message(msg, wparam, self.show_message)
+                setting = None
+                if msg == WM_SETTINGCHANGE and lparam:
+                    setting = ctypes.wstring_at(lparam)  # e.g. "ImmersiveColorSet"
+                cmd = translate_message(msg, wparam, self.show_message, setting)
                 if cmd is not None:
                     if msg == WM_ENDSESSION and self.on_session_end is not None:
                         self.on_session_end()  # silence before Windows ends the process
@@ -172,7 +176,8 @@ class MessageWindow(threading.Thread):  # pragma: no cover - Windows only
         wc = WNDCLASSW()
         wc.lpfnWndProc = self._proc
         wc.hInstance = hinst
-        wc.lpszClassName = "MouseMusicV2MessageWindow"
+        # Unique per instance: a window class is bound to one wndproc (this instance's).
+        wc.lpszClassName = f"MouseMusicV2MessageWindow{id(self):x}"
         if not user32.RegisterClassW(ctypes.byref(wc)):
             log.warning("RegisterClassW failed: %s", ctypes.get_last_error())
         self.hwnd = user32.CreateWindowExW(

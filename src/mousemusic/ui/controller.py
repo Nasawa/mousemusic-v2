@@ -21,6 +21,7 @@ from mousemusic.platform.hotkey import HOTKEY_OFF, HOTKEY_PRESETS, candidates, n
 from mousemusic.scales import NOTE_NAMES, SCALE_LABELS
 from mousemusic.ui import strings
 from mousemusic.ui.status import WARNING_SECONDS, StatusModel, display_note
+from mousemusic.ui.theme import REAPPLY_INTERVAL_S, resolve
 
 log = logging.getLogger(__name__)
 
@@ -67,6 +68,7 @@ class AppController:
         hotkey_active: str | None = None,
         hotkey_registrar: Callable[[str], None] | None = None,
         first_run: bool = False,
+        theme_probe: Callable[[], tuple[bool | None, bool]] | None = None,
     ) -> None:
         """``hotkey_active``: the shortcut that actually registered (may be the fallback);
         defaults to the configured one when ``hotkey_ok``. ``hotkey_registrar(setting)``
@@ -83,6 +85,11 @@ class AppController:
         self.w5_shown = False
         self.quitting = False
         self.hotkey_registrar = hotkey_registrar
+        # Theme (docs/ux.md §11): (AppsUseLightTheme, high contrast) from Windows.
+        self._theme_probe = theme_probe or (lambda: (None, False))
+        self.apps_light, self.high_contrast = self._theme_probe()
+        self._theme_pending = False
+        self._theme_probed_at = float("-inf")
         self.status = StatusModel(
             hotkey=hotkey_active or settings.hotkey,
             hotkey_ok=hotkey_ok and settings.hotkey != HOTKEY_OFF,
@@ -350,6 +357,45 @@ class AppController:
                 duration=WARNING_SECONDS,
             )  # fmt: skip
 
+    # -- theme (docs/ux.md §11) ---------------------------------------------------------
+
+    @property
+    def effective_theme(self) -> str:
+        return resolve(self.settings.theme, self.apps_light, self.high_contrast)
+
+    def theme_options(self) -> list[Option]:
+        mode = strings.THEME_SYSTEM_DARK if self.apps_light is False else strings.THEME_SYSTEM_LIGHT
+        return [
+            Option("system", strings.THEME_SYSTEM.format(mode=mode)),
+            Option("light", strings.THEME_LIGHT),
+            Option("dark", strings.THEME_DARK),
+        ]
+
+    def theme_tooltip(self) -> str:
+        return strings.THEME_TOOLTIP_HC if self.high_contrast else strings.THEME_TOOLTIP
+
+    def set_theme(self, theme: str) -> None:
+        if theme != self.settings.theme:
+            self._update(theme=theme, post=False)
+            self._changed()
+
+    def request_theme_refresh(self) -> None:
+        """WM_SETTINGCHANGE / window focus: re-read Windows' theme, coalesced (≤ 1 per
+        250 ms) in :meth:`tick`."""
+        self._theme_pending = True
+        self._poll_theme()
+
+    def _poll_theme(self) -> None:
+        now = self.clock()
+        if not self._theme_pending or now - self._theme_probed_at < REAPPLY_INTERVAL_S:
+            return
+        self._theme_pending = False
+        self._theme_probed_at = now
+        probed = self._theme_probe()
+        if probed != (self.apps_light, self.high_contrast):
+            self.apps_light, self.high_contrast = probed
+            self._changed()
+
     def window_moved(self, x: int, y: int) -> None:
         if (x, y) != (self.settings.window_x, self.settings.window_y):
             self._update(window_x=x, window_y=y, post=False)
@@ -407,6 +453,8 @@ class AppController:
             self.show_window()
         elif kind == "quit":
             self.quit()
+        elif kind == "theme_changed":
+            self.request_theme_refresh()
         elif kind == "hotkey":
             self.on_hotkey(value)
         elif kind == "save_error":
@@ -418,6 +466,7 @@ class AppController:
 
     def tick(self) -> None:
         """Called by the 50 ms drain so expiring warnings disappear."""
+        self._poll_theme()
         self._changed()
 
     def _changed(self) -> None:

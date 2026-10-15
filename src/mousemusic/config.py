@@ -32,6 +32,7 @@ APP_DIR_NAME = "MouseMusic"
 SETTINGS_FILE = "settings.json"
 SAVE_DEBOUNCE_S = 0.5
 SCREEN_MODES = ("virtual_desktop", "primary")
+THEMES = ("system", "light", "dark")
 
 # Validation ranges, ARCHITECTURE.md §11 OQ-8. WINDOW_POS_RANGE is ours (Win32 coordinate span).
 NOTE_RANGE = (0, 127)
@@ -66,6 +67,7 @@ class Settings:
     screen_mode: str = "virtual_desktop"
     start_on_launch: bool = False
     hotkey: str = "Ctrl+Alt+M"
+    theme: str = "system"
     first_run_done: bool = False
     tray_hint_shown: bool = False
     window_x: int | None = None
@@ -171,6 +173,17 @@ def _hotkey(raw: Mapping[str, Any], issues: _Issues) -> str:
     return norm
 
 
+def _theme(raw: Mapping[str, Any], issues: _Issues) -> str:
+    """``system``/``light``/``dark``, case and surrounding spaces ignored (normalised).
+    Anything else → ``system`` + W3 (docs/ux.md §11.1)."""
+    value = raw.get("theme", DEFAULTS.theme)
+    norm = value.strip().lower() if isinstance(value, str) else None
+    if norm not in THEMES:
+        issues.add("theme", value, DEFAULTS.theme)
+        return DEFAULTS.theme
+    return norm
+
+
 def _note_range(low: int, high: int, issues: _Issues) -> tuple[int, int]:
     """OQ-8: keep at least an octave. If ``high - low < 12``: ``high = min(127, low + 12)``;
     if that is still short, ``low = high - 12``."""
@@ -240,6 +253,7 @@ def validate(raw: Mapping[str, Any]) -> tuple[Settings, list[str]]:
         screen_mode=_choice(raw, "screen_mode", SCREEN_MODES, issues),
         start_on_launch=_bool(raw, "start_on_launch", issues),
         hotkey=_hotkey(raw, issues),
+        theme=_theme(raw, issues),
         first_run_done=_bool(raw, "first_run_done", issues),
         tray_hint_shown=_bool(raw, "tray_hint_shown", issues),
         window_x=_optional_int(raw, "window_x", issues),

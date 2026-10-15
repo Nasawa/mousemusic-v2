@@ -64,12 +64,24 @@ def parse_hotkey(text: object) -> Hotkey | None:
     return Hotkey(flags, vk, text.strip())
 
 
-def translate_message(msg: int, wparam: int, show_message: int | None = None) -> str | None:
+WM_SETTINGCHANGE = 0x001A
+SPI_SETHIGHCONTRAST = 0x0043
+
+
+def translate_message(
+    msg: int, wparam: int, show_message: int | None = None, setting: str | None = None
+) -> str | None:
     """Window message → command name, or None to ignore.
 
     ``toggle`` (hotkey), ``suspend``/``resume`` (OQ-3; ``PBT_APMRESUMESUSPEND`` and
     ``PBT_APMRESUMEAUTOMATIC`` both mean resume, the engine ignores the second one),
-    ``quit`` (session ending), ``display_changed``, ``show`` (second instance)."""
+    ``quit`` (session ending), ``display_changed``, ``show`` (second instance),
+    ``theme_changed`` (``WM_SETTINGCHANGE`` with ``lParam`` = ``"ImmersiveColorSet"``, the
+    string passed as ``setting``, or ``wParam`` = ``SPI_SETHIGHCONTRAST``; docs/ux.md §11.2)."""
+    if msg == WM_SETTINGCHANGE:
+        if setting == "ImmersiveColorSet" or wparam == SPI_SETHIGHCONTRAST:
+            return "theme_changed"
+        return None
     if msg == WM_HOTKEY:
         return "toggle"
     if msg == WM_POWERBROADCAST:

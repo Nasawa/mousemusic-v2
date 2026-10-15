@@ -33,6 +33,7 @@ SPEC_DEFAULTS = {
     "screen_mode": "virtual_desktop",
     "start_on_launch": False,
     "hotkey": "Ctrl+Alt+M",
+    "theme": "system",
     "first_run_done": False,
     "tray_hint_shown": False,
     "window_x": None,
@@ -505,3 +506,27 @@ def test_bom_prefixed_file_is_not_corrupt(tmp_path):
     assert not (tmp_path / "settings.json.bak").exists()
     config.save(r.settings, path)
     assert not path.read_bytes().startswith(b"\xef\xbb\xbf")  # written back as plain utf-8
+
+
+@pytest.mark.parametrize(
+    ("value", "want", "ok"),
+    [
+        ("system", "system", True),
+        ("Dark", "dark", True),
+        (" LIGHT ", "light", True),
+        ("sepia", "system", False),
+        (1, "system", False),
+        (None, "system", False),
+    ],
+)
+def test_theme_validated_and_normalised(value, want, ok):
+    s, issues = validate({"theme": value})
+    assert s.theme == want
+    assert (issues == []) == ok
+
+
+def test_theme_default_and_round_trip(tmp_path):
+    assert DEFAULTS.theme == "system"
+    path = tmp_path / "settings.json"
+    config.save(DEFAULTS.replace(theme="dark"), path)
+    assert config.load_report(path).settings.theme == "dark"
