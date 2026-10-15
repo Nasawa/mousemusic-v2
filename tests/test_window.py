@@ -358,3 +358,26 @@ def test_tooltip_uses_palette(root):
     w.theme_tip.show()
     assert str(w.theme_tip.tip.cget("bg")).upper() == "#2D2D2D"
     w.theme_tip.hide()
+
+
+def test_preview_button(root):
+    from test_controller import FakePreviewer
+
+    p = FakePreviewer()
+    ctl = AppController(DEFAULTS, FakeEngine(), FakeSaver(), lambda: [GS], Clock(), previewer=p)
+    w = MainWindow(root, ctl, tray=FakeTray(), open_url=lambda u: None)
+    ctl.startup()
+    root.update()
+    assert w.preview_btn.cget("text") == strings.PREVIEW
+    assert w.instruments.master.winfo_reqwidth() <= w.device.master.winfo_reqwidth()
+    assert not w.preview_btn.instate(["disabled"])
+    w.preview_btn.invoke()
+    assert len(p.started) == 1 and w.preview_btn.instate(["disabled"])
+    p.active = False
+    ctl.dispatch(("preview_done", None))
+    assert not w.preview_btn.instate(["disabled"])
+
+
+def test_no_preview_button_without_previewer(root):
+    w, *_ = build(root)
+    assert w.preview_btn is None
