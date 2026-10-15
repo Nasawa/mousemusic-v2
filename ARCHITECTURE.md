@@ -443,3 +443,12 @@ binding. Where one overlaps an earlier section, this section wins.
 | S-1 | **Ratified.** Volume changes merge to one CC7 per tick, latest wins (= A-5). |
 | S-2 | **Ratified.** After wake, the device is reopened only if it was playing before sleep; otherwise it stays closed until Start (= A-1, OQ-3). |
 | S-3 | **Ratified, settled by #19 and supersedes OQ-5.** Try the configured hotkey, then fall back to `Ctrl+Alt+Shift+M` (W7). W4 only if both fail. `Off` disables it. `hotkey` is now editable in the UI (Shortcut row) and validated; invalid → default + W3. |
+
+### Test-plan ambiguities (B-1 – B-4)
+
+| # | Decision |
+|---|---|
+| B-1 | `theme` is case-insensitive: strip whitespace and lowercase it before validating (`" Dark "` → `dark`). Anything not in `system`/`light`/`dark` after that, or a non-string → `system` + W3. The file is written back in canonical lowercase on the next save. |
+| B-2 | The status wraps, and the window grows from the 360 minimum up to the **work-area height of its current monitor** (`rcWork`, so the taskbar is never covered). Past that cap the status label is **truncated** to the whole lines that fit, the last ending in `…`. The full text goes in the status tooltip and the log. **No scrolling:** a scrollable status line in a 340-px window is awkward for keyboard and screen-reader users, and it hides that there's more. Realistically the cap only matters at 200–300 % scaling on very small screens, since the longest current message (W4) is three lines. |
+| B-3 | Yes, reuse it. `ui/placement.py` exists, is pure and tested, and already clamps against **work areas** (`monitor_work_areas` → `rcWork`). `_clamp` pins the window to the area's top when it's taller than the area, which is consistent with the B-2 cap. Today `Window._fit()` resizes in place without re-clamping, so Sprite must call `place_window((x, y), (w, h_capped), work_areas, primary)` after each height change, with the height already capped per B-2. The window grows downward and moves up only as far as needed, and the moved position isn't saved unless the user moves the window. |
+| B-4 | `docs/ux.md` §1 is now "minimum 340 × 360, grows to fit" (it said 340 × 300 fixed). Main's code still has `HEIGHT = 330` in `ui/window.py`. Sprite changes it to 360 when the Theme row (PR #22) lands, or earlier. |
