@@ -261,3 +261,12 @@ def test_explicit_stop_clears_pending_wake_sn09a():
     eng.post("resume")
     eng.step(0.2)
     assert not eng.playing and not fake.is_open
+
+
+@pytest.mark.parametrize("text", ["Alt+Alt+M", "Ctrl+F13", "Ctrl+MM", "Control+M", "+", 123, None])
+def test_invalid_hotkey_setting_resets_to_default_with_w3_sd14(text):
+    from mousemusic.config import DEFAULTS, validate
+
+    s, issues = validate({"hotkey": text})
+    assert s.hotkey == DEFAULTS.hotkey == "Ctrl+Alt+M"
+    assert any(i.startswith("hotkey=") for i in issues)  # W3 is shown for any issue

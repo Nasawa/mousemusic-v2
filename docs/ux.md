@@ -16,8 +16,18 @@ Design principles:
 ## 1. Main window
 
 - Title: `MouseMusic` (no version in the title bar. Version goes in the tray tooltip and `--version`.)
-- Size: **340 × 300** logical px at 100% scaling, fixed (not resizable). It's within the ≤ 360×300 budget in §10 P1.
-  Tk handles DPI scaling. Don't hard-code physical px.
+- Size: **minimum 340 × 360** logical px at 100% scaling, not user-resizable. The width is fixed. The height
+  **grows to fit** a wrapped status message and shrinks back to the minimum afterwards (ARCHITECTURE §11 B-2/B-4).
+  This supersedes the old ≤ 360×300 budget. Tk handles DPI scaling. Don't hard-code physical px.
+  *Implementation note:* main's code still uses a 340 × 330 minimum (`ui/window.py` `HEIGHT`). Sprite changes it to 360.
+- Height cap (B-2): the window never grows taller than the **work area** of the monitor it's on. If the wrapped
+  status still doesn't fit, the status shows as many whole lines as fit and the last visible line ends with `…`. The
+  full text is in the status tooltip and the log. No scrollbar.
+- Staying on screen (B-3): whenever the height changes, the window position is re-clamped into its monitor's work
+  area with the same `ui/placement.py` logic used on restore (it grows downward, and moves up only if the bottom
+  would leave the work area).
+- Theme setting (B-1): `theme` is read case-insensitively (stripped and lowercased, so `" Dark "` → `dark`). Any
+  other value → `system` + W3.
 - Position: saved in `window_x`/`window_y` (logical px, `null` = centre on primary). On load, if the saved point isn't on any monitor's work area, centre the window and don't overwrite the saved values until the user moves it (§11 UX-Q1).
 - Icon: `assets/icon.ico` (P2).
 - Layout: ttk `grid`, two columns (label right-aligned, control left-aligned), 8 px padding, 4 px row gap.
@@ -61,7 +71,7 @@ Hold notes → MIDI output → Reconnect → Shortcut. Start has focus when the 
 | 8 | `MIDI output` | readonly Combobox, ellipsized at ~24 chars, full name in tooltip | WinMM device names | `Microsoft GS Wavetable Synth` | `midi_device` | **Re-enumerates every time the dropdown opens** (§9). Choosing a device while playing silences, closes and reopens (engine `set_device`). If the list is empty the combobox shows `No MIDI output found` and is disabled |
 | 8b | `⟳` (tooltip `Reconnect`) | small ttk.Button | — | — | — | Closes and reopens the selected device. Use it after unplugging headphones etc. Status: `Reconnecting…` then the normal status |
 | 8c | `Shortcut` | readonly Combobox | `Ctrl+Alt+M`, `Ctrl+Alt+Shift+M`, `Ctrl+Alt+P`, `Ctrl+Alt+F9`, `Off` (a custom value from the file is listed first) | `Ctrl+Alt+M` | `hotkey` | Re-registers live on change. If the chosen key is taken, `Ctrl+Alt+Shift+M` is tried as a fallback (W7); if both fail, W4 |
-| 9 | status line | ttk.Label, **wraps** to the window width | see §1.3 | — | — | Coloured dot + text. Never truncated: long messages wrap onto more lines and the window grows taller to fit (shrinking back afterwards). Errors stay until resolved. They are never auto-dismissed |
+| 9 | status line | ttk.Label, **wraps** to the window width | see §1.3 | — | — | Coloured dot + text. Long messages wrap onto more lines and the window grows taller to fit (shrinking back afterwards). Truncated with `…` only when the window has reached the work-area height (§1, B-2); the full text is then in the tooltip. Errors stay until resolved. They are never auto-dismissed |
 
 All settings save automatically (debounced 500 ms, per §4). There is **no Save, Apply, or OK button.**
 
@@ -251,7 +261,7 @@ Mnemonic underlines (Alt+letter) are deferred to P2.
 | E1/E2/W1, re-enumerate on dropdown open, Reconnect, single-instance focus | §9 |
 
 ## 8. Acceptance checklist for S6
-- [ ] Window matches §1.1 order and §1.2 labels exactly, ≤ 360×300 at 100%.
+- [ ] Window matches §1.1 order and §1.2 labels exactly, minimum 340×360 at 100%, grows to fit, never taller than the work area and always inside it (B-2/B-3).
 - [ ] Every control applies live and persists across restarts.
 - [ ] Start label flips only on engine confirmation. Failures show E-copy.
 - [ ] Tray menu has exactly `Start/Stop`, `Show window` (default), separator, `Quit`. The tooltip matches §2.1.
