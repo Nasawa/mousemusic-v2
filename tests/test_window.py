@@ -20,10 +20,18 @@ from test_controller import GS, Clock, FakeEngine, FakeSaver
 def tk_session():
     # One Tcl interpreter per session: creating many tk.Tk() instances is flaky on Windows
     # runners ("Can't find a usable tk.tcl"), so each test gets a Toplevel instead.
-    try:
-        r = tk.Tk()
-    except tk.TclError as exc:
-        pytest.skip(f"no display: {exc}")
+    # Windows runners sometimes fail to read init.tcl transiently ("couldn't read file ...:
+    # No error"), which skipped every window test and broke the coverage gate: retry.
+    import time
+
+    for attempt in range(5):
+        try:
+            r = tk.Tk()
+            break
+        except tk.TclError as exc:
+            if "display" in str(exc).lower() or attempt == 4:
+                pytest.skip(f"no display: {exc}")
+            time.sleep(0.5 * (attempt + 1))
     r.withdraw()
     yield r
     r.destroy()
