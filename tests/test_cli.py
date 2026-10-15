@@ -36,7 +36,8 @@ def test_self_test_passes_with_zero_devices():
         "PASS midi",
         "PASS taskbar",
     ]
-    assert "     no taskbar zone" in lines  # no taskbar on CI/Linux: still a pass
+    if sys.platform != "win32":
+        assert "     no taskbar zone" in lines  # no taskbar: still a pass
 
 
 def test_self_test_reports_failure():
