@@ -116,9 +116,9 @@ with legato **off** and **on** (legato holds notes indefinitely, so it's the wor
 | SD-10 | Portable zip fallback | Unzip the onedir zip and run it | Works the same. This is the documented fallback if AV objects (§7) | M |
 | SD-11 | No hooks | Review: no `SetWindowsHookEx`/pynput imports. Only `GetCursorPos` + `RegisterHotKey` (§1, §9) | Passes | M (code review) + A (optional grep test) |
 | SD-12 | Single instance | Launch the exe twice | Second launch focuses the first window and exits. Named mutex `Local\MouseMusicV2` (§9) | M |
-| SD-13 | Hotkey conflict | Another app already owns Ctrl+Alt+M (e.g. a tiny `RegisterHotKey` helper script). Launch | App runs. W4 in the status line for 15 s. Start hint reads `(shortcut off)` (§11 OQ-5) | M |
-| SD-14 | Hotkey parsing | Table tests: `Ctrl+Alt+M`, `Shift+Win+F12`, `Ctrl+0`, then invalid values (`Ctrl+Alt`, `Hyper+M`, `Ctrl+F13`, `Ctrl+MM`, `""`, `123`) | Valid ones parse (modifiers Ctrl/Alt/Shift/Win + one A–Z/0–9/F1–F12). Invalid → W4, **no** hotkey registered, the default is **not** substituted (§11 OQ-5) | A |
-| SD-15 | Hotkey is file-only | Check the UI | There's no hotkey control in v0.1. Editing the file + restart changes it (§11 OQ-5) | M |
+| SD-13 | Hotkey conflict | Another app already owns Ctrl+Alt+M (e.g. a tiny `RegisterHotKey` helper script). Launch | App runs. `Ctrl+Alt+Shift+M` is used instead: W7 for 15 s, hint/status/tray tooltip show it. With the fallback also taken: W4 for 15 s and the hint reads `(shortcut off)` (§11 OQ-5) | M |
+| SD-14 | Hotkey parsing | Table tests: `Ctrl+Alt+M`, `Shift+Win+F12`, `Ctrl+0`, then invalid values (`Ctrl+Alt`, `Hyper+M`, `Ctrl+F13`, `Ctrl+MM`, `""`, `123`) | Valid ones parse (modifiers Ctrl/Alt/Shift/Win + one A–Z/0–9/F1–F12) and are normalised in settings (`alt+ctrl+m` → `Ctrl+Alt+M`). `Off`/`""`/`none` → Off. Any other invalid value in settings.json → reset to `Ctrl+Alt+M` with W3 (§11 OQ-5, revised) | A |
+| SD-15 | Hotkey picker | Change the `Shortcut` combobox, including to `Off` | Re-registers immediately (works with the window hidden), persists across restart. Editing the file + restart also works (§11 OQ-5, revised) | M |
 
 ## 6. Latency, timing and CPU (§1, §6, §9 "GS Wavetable Synth latency", "Timer resolution / CPU", G4)
 
