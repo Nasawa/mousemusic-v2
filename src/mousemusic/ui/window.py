@@ -251,14 +251,26 @@ class MainWindow:
             lambda: self.ctl.settings.note_length_ms,
         )
 
+        # Row 7: Hold notes + Taskbar notes in one frame, 16 px apart (docs/ux.md §12.1).
+        lf = ttk.Frame(f)
+        lf.grid(row=8, column=0, columnspan=2, sticky="e", **pad)
         self.legato_var = tk.BooleanVar(value=False)
         self.legato = ttk.Checkbutton(
-            f,
+            lf,
             text=strings.LABEL_LEGATO,
             variable=self.legato_var,
             command=lambda: self.ctl.set_legato(self.legato_var.get()),
         )
-        self.legato.grid(row=8, column=1, sticky="w", **pad)
+        self.legato.grid(row=0, column=0, sticky="w")
+        self.taskbar_var = tk.BooleanVar(value=False)
+        self.taskbar = ttk.Checkbutton(
+            lf,
+            text=strings.LABEL_TASKBAR,
+            variable=self.taskbar_var,
+            command=lambda: self.ctl.set_taskbar_mode(self.taskbar_var.get()),
+        )
+        self.taskbar.grid(row=0, column=1, sticky="w", padx=(16, 0))
+        Tooltip(self.taskbar, strings.TASKBAR_TOOLTIP)
 
         label(9, strings.LABEL_MIDI)
         mf = ttk.Frame(f)
@@ -572,6 +584,7 @@ class MainWindow:
         self.note_length.state(["!disabled"] if c.note_length_enabled else ["disabled"])
         self.note_length_label.state(["!disabled"] if c.note_length_enabled else ["disabled"])
         self.legato_var.set(s.legato)
+        self.taskbar_var.set(s.taskbar_mode)
         opts = c.device_options()
         self._set_combo(self.device, opts, c.selected_device)
         self.device.state(["!disabled"] if c.devices else ["disabled"])

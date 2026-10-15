@@ -45,7 +45,7 @@ class Scheduler:
         self.program: int | None = None
         self.off_at: float | None = None
         self.last_on: float | None = None
-        self.pending: tuple[int, int] | None = None
+        self.pending: tuple[int, int, int | None] | None = None
         self.note_ons = 0
 
     # -- configuration ----------------------------------------------------------
@@ -64,10 +64,11 @@ class Scheduler:
 
     # -- events -----------------------------------------------------------------
 
-    def request(self, note: int, program: int, now: float) -> bool:
+    def request(self, note: int, program: int, now: float, velocity: int | None = None) -> bool:
         """The cursor entered a new cell. Plays now if the rate limit allows, else stores it
-        as the pending (latest-wins) request. Returns True if a note-on was sent."""
-        self.pending = (note, program)
+        as the pending (latest-wins) request. Returns True if a note-on was sent.
+        ``velocity`` overrides the setting for this note (taskbar wrap, design §4.3)."""
+        self.pending = (note, program, velocity)
         return self._flush(now)
 
     def tick(self, now: float) -> None:
@@ -114,7 +115,7 @@ class Scheduler:
             return False
         if self.last_on is not None and now - self.last_on < RATE_LIMIT_S:
             return False
-        note, program = self.pending
+        note, program, velocity = self.pending
         self.pending = None
         if self.active_note is not None:
             old, self.active_note = self.active_note, None
@@ -122,7 +123,7 @@ class Scheduler:
         if program != self.program:
             self._send(*program_change(program))
             self.program = program
-        self._send(*note_on(note, self.params.velocity))
+        self._send(*note_on(note, velocity or self.params.velocity))
         self.active_note = note
         self.last_on = now
         self.note_ons += 1

@@ -65,11 +65,16 @@ def parse_hotkey(text: object) -> Hotkey | None:
 
 
 WM_SETTINGCHANGE = 0x001A
+SPI_SETWORKAREA = 0x002F
 SPI_SETHIGHCONTRAST = 0x0043
 
 
 def translate_message(
-    msg: int, wparam: int, show_message: int | None = None, setting: str | None = None
+    msg: int,
+    wparam: int,
+    show_message: int | None = None,
+    setting: str | None = None,
+    taskbar_created: int | None = None,
 ) -> str | None:
     """Window message → command name, or None to ignore.
 
@@ -81,7 +86,11 @@ def translate_message(
     if msg == WM_SETTINGCHANGE:
         if setting == "ImmersiveColorSet" or wparam == SPI_SETHIGHCONTRAST:
             return "theme_changed"
+        if setting == "TraySettings" or wparam == SPI_SETWORKAREA:
+            return "taskbar_changed"  # taskbar moved/resized/settings (CG-S3 refresh)
         return None
+    if taskbar_created is not None and msg == taskbar_created:
+        return "taskbar_changed"  # Explorer restarted (registered TaskbarCreated)
     if msg == WM_HOTKEY:
         return "toggle"
     if msg == WM_POWERBROADCAST:

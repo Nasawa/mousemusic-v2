@@ -80,6 +80,27 @@ def make_monitors() -> Any:
     return None  # window falls back to Tk's screen size
 
 
+def make_taskbar_scan(settings: config.Settings, on_snapshot: Any) -> Any:
+    """CG-S3: the long-lived ``taskbar-scan`` thread (Windows only). UI Automation is loaded on
+    that thread (COM MTA), and never when ``taskbar_slot_source`` is ``fixed``."""
+    if sys.platform != "win32":
+        return None
+    from mousemusic.platform import win_taskbar, win_taskbar_uia  # pragma: no cover
+    from mousemusic.taskbar import Scanner, ScanThread, ZoneOptions  # pragma: no cover
+
+    opts = ZoneOptions.from_settings(settings)  # pragma: no cover
+    scanner = Scanner(win_taskbar.find_taskbars, None, opts=opts)  # pragma: no cover
+
+    def setup() -> None:  # pragma: no cover - Windows only
+        win_taskbar_uia.init_mta()
+        if opts.slot_source != "fixed":
+            scanner.reader = win_taskbar_uia.make_reader()
+
+    thread = ScanThread(scanner, on_snapshot, setup=setup)  # pragma: no cover
+    thread.start()  # pragma: no cover
+    return thread  # pragma: no cover
+
+
 def make_announcer() -> Any:
     """C-2: full status text to screen readers via the label's window text (Windows only)."""
     if sys.platform != "win32":
@@ -195,11 +216,14 @@ def _run_app(opts: Options, instance: Any) -> int:
         if not tray.start(strings.TRAY_TOOLTIP_STOPPED.format(version=__version__)):
             tray = None
 
+    taskbar_scan = make_taskbar_scan(settings, lambda snap: engine.post(eng.TASKBAR, snap))
+
     controller = AppController(
         settings, engine, saver, backend.list_devices, time.monotonic,
         hotkey_ok=hotkey_active is not None, hotkey_active=hotkey_active,
         hotkey_registrar=message_window.reregister if message_window else None,
         first_run=not loaded.existed, theme_probe=win_theme.probe,
+        taskbar_scan=taskbar_scan,
         previewer=Previewer(lambda: make_backend(settings, opts.dry_run),
                             lambda error: post(("preview_done", error))),
     )  # fmt: skip
@@ -222,6 +246,8 @@ def _run_app(opts: Options, instance: Any) -> int:
         controller.quit()  # idempotent: engine silenced + joined, settings flushed
         if message_window is not None:  # pragma: no cover - Windows only
             message_window.stop()
+        if taskbar_scan is not None:  # pragma: no cover - Windows only
+            taskbar_scan.stop()
         with contextlib.suppress(tk.TclError):
             root.destroy()
     log.info("MouseMusic exited cleanly")

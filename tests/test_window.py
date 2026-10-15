@@ -102,7 +102,8 @@ def test_tab_order_follows_ux(root):
 
     chain = list(walk(root))
     expected = [w.start_btn, w.scale, w.key, w.low, w.high, w.instruments, w.volume,
-                w.note_length, w.legato, w.device, w.reconnect, w.hotkey, w.theme]  # fmt: skip
+                w.note_length, w.legato, w.taskbar, w.device, w.reconnect, w.hotkey,
+                w.theme]  # fmt: skip
     assert chain == expected
 
 
@@ -471,3 +472,15 @@ def test_preview_button(root):
 def test_no_preview_button_without_previewer(root):
     w, *_ = build(root)
     assert w.preview_btn is None
+
+
+def test_taskbar_checkbox_row7(root):
+    w, ctl, _e, *_ = build(root)
+    assert w.taskbar.cget("text") == strings.LABEL_TASKBAR
+    assert w.taskbar.master is w.legato.master  # same row-7 frame, no extra row
+    w.taskbar.invoke()
+    root.update()
+    assert ctl.settings.taskbar_mode and w.taskbar_var.get()
+    assert w.taskbar.master.winfo_reqwidth() <= w.size()[0]  # Q-T1: fits at minimum width
+    w.taskbar.invoke()
+    assert not ctl.settings.taskbar_mode

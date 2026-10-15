@@ -70,6 +70,7 @@ class AppController:
         first_run: bool = False,
         theme_probe: Callable[[], tuple[bool | None, bool]] | None = None,
         previewer: Any = None,
+        taskbar_scan: Any = None,
     ) -> None:
         """``hotkey_active``: the shortcut that actually registered (may be the fallback);
         defaults to the configured one when ``hotkey_ok``. ``hotkey_registrar(setting)``
@@ -86,6 +87,7 @@ class AppController:
         self.w5_shown = False
         self.quitting = False
         self.hotkey_registrar = hotkey_registrar
+        self.taskbar_scan = taskbar_scan  # taskbar.ScanThread (Windows); None elsewhere
         self.previewer = previewer  # preview.Previewer; None hides the Preview button
         # Theme (docs/ux.md §11): (AppsUseLightTheme, high contrast) from Windows.
         self._theme_probe = theme_probe or (lambda: (None, False))
@@ -210,9 +212,11 @@ class AppController:
         elif event.kind == "stopped":
             self.status.on_stopped()
         elif event.kind == "note":
-            self.status.on_note(event.data["note"], event.data["program"])
+            self.status.on_note(event.data["note"], event.data["program"], event.data.get("zone"))
         elif event.kind == "error":
             self._on_error(event.data["error"])
+        if event.kind in ("started", "stopped", "error"):
+            self._sync_taskbar()
         self._changed()
 
     def _on_error(self, exc: Exception) -> None:
@@ -351,6 +355,17 @@ class AppController:
     def set_legato(self, on: bool) -> None:
         self._update(legato=bool(on))
         self._changed()
+
+    def set_taskbar_mode(self, on: bool) -> None:
+        """Row 7 checkbox: live, no Stop needed (docs/ux.md §12.1)."""
+        self._update(taskbar_mode=bool(on))
+        self._sync_taskbar()
+        self._changed()
+
+    def _sync_taskbar(self) -> None:
+        """Scan the taskbar only while playing with taskbar notes on (design §4.2a)."""
+        if self.taskbar_scan is not None:
+            self.taskbar_scan.activate(self.status.playing and self.settings.taskbar_mode)
 
     # -- global shortcut ---------------------------------------------------------------
 
@@ -503,7 +518,12 @@ class AppController:
             self.on_preview_done(value)
         elif kind == "save_error":
             self.on_save_error()
+        elif kind == "taskbar_changed":
+            if self.taskbar_scan is not None:
+                self.taskbar_scan.refresh()
         elif kind in (eng.SUSPEND, eng.RESUME, eng.DISPLAY_CHANGED):
+            if kind == eng.DISPLAY_CHANGED and self.taskbar_scan is not None:
+                self.taskbar_scan.refresh()
             self.engine.post(kind)
         else:
             log.warning("unknown UI item %r", kind)
