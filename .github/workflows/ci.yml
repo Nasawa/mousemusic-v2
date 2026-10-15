@@ -124,6 +124,7 @@ jobs:
           Write-Host $real
           if ($LASTEXITCODE -gt 1) { throw "real --play-instrument exited $LASTEXITCODE" }
           if ($real.Contains("Traceback")) { throw "traceback in --play-instrument output" }
+          exit 0  # a friendly MIDI error (1) is acceptable here
 
       - name: Verify embedded manifest declares DPI awareness
         run: python tools/check_manifest.py dist/MouseMusic.exe
