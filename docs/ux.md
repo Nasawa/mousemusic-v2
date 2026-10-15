@@ -16,7 +16,7 @@ Design principles:
 ## 1. Main window
 
 - Title: `MouseMusic` (no version in the title bar. Version goes in the tray tooltip and `--version`.)
-- Size: **340 × 300** logical px at 100% scaling, fixed (not resizable). It's within the ≤ 360×300 budget in §10 P1.
+- Size: **minimum 340 × 360** logical px at 100% scaling, grows to fit (taller for long status messages, then shrinks back). The user can't resize it. This supersedes the original ≤ 360×300 P1 budget (ARCHITECTURE §11 Q-D1).
   Tk handles DPI scaling. Don't hard-code physical px.
 - Position: saved in `window_x`/`window_y` (logical px, `null` = centre on primary). On load, if the saved point isn't on any monitor's work area, centre the window and don't overwrite the saved values until the user moves it (§11 UX-Q1).
 - Icon: `assets/icon.ico` (P2).
@@ -25,7 +25,7 @@ Design principles:
 ### 1.1 Wireframe
 
 ```
-┌ MouseMusic ───────────────────────────── _ □ ✕ ┐
+┌ MouseMusic  (min 340 × 360, grows to fit) ─ _ ✕ ┐
 │                                                 │
 │  [ ▶  Start ]                Ctrl+Alt+M         │   row 0  Start/Stop button + hotkey hint
 │ ─────────────────────────────────────────────── │
@@ -253,7 +253,7 @@ Mnemonic underlines (Alt+letter) are deferred to P2.
 | E1/E2/W1, re-enumerate on dropdown open, Reconnect, single-instance focus | §9 |
 
 ## 8. Acceptance checklist for S6
-- [ ] Window matches §1.1 order and §1.2 labels exactly, ≤ 360×300 at 100%.
+- [ ] Window matches §1.1 order and §1.2 labels exactly, minimum 340 × 360 at 100%, growing to fit.
 - [ ] Every control applies live and persists across restarts.
 - [ ] Start label flips only on engine confirmation. Failures show E-copy.
 - [ ] Tray menu has exactly `Start/Stop`, `Show window` (default), separator, `Quit`. The tooltip matches §2.1.
@@ -296,7 +296,7 @@ Windows app theme by default, and can be overridden. Nothing here changes audio 
 | Values (exact) | `System (Light)` or `System (Dark)` (first item; the suffix shows what Windows is set to right now), `Light`, `Dark` |
 | Settings key | `theme`: `"system"` \| `"light"` \| `"dark"`. Default **`"system"`**. Unknown value → `"system"` with W3 (same as other enums, §11 OQ-8) |
 | Behaviour | Applies live on selection, no restart. Saved with the normal 500 ms debounce |
-| Height | The extra row adds ~28 px. If the window no longer fits 340 × 300 at 100 % scaling, it grows to fit, like the status line already does (see Q-D1) |
+| Height | Minimum 340 × 360, grows to fit (ARCHITECTURE §11 Q-D1) |
 
 Resolving the effective theme (pure function, testable without Windows):
 1. If Windows **high contrast** is on → `high_contrast` (§11.6). The `theme` setting is ignored but kept.
@@ -488,15 +488,14 @@ borders sit on `surface` fields (3.45:1) where it matters.
 - [ ] `tools/contrast.py` passes, and is optionally added to CI.
 - [ ] Manual check on Windows 11: switch Settings → Personalization → Colors → *Choose your mode* while the app is open and stopped and playing. The title bar, window, open popdown and tooltips all flip within ~1 s, with no restart and no audio glitch. Repeat with high contrast (Left Alt+Left Shift+Print Screen). Check at 100 % and 150 % scaling.
 
-### 11.11 Open questions (dark mode)
+### 11.11 Open questions (dark mode) — all resolved
 
-- **Q-D1 Window height.** The `Theme` row pushes the window past 300 px at 100 % (the §10 P1 budget). Proposal: allow
-  ~330 px, or move `Theme` and `Shortcut` into a later "More…" area. Archimedes?
-- **Q-D2 Settings schema.** Adding `theme` with a default is backward-compatible (older builds ignore unknown keys,
-  §4), so it should not need a `schema` bump. Archimedes to confirm and add `theme` to §4 defaults and OQ-8 enum validation.
-- **Q-D3 Dark tray menu.** Making the pystray menu dark needs undocumented `uxtheme` ordinals (`SetPreferredAppMode`
-  #135, `FlushMenuThemes` #136). Proposal: not in v0.x. It's fragile across builds and could raise AV heuristics (§9).
-- **Q-D4 Theme engine.** This spec uses stdlib `clam` with our palette. `sv-ttk` (Sun Valley) looks more like
-  Windows 11 but adds a runtime dependency and assets to the bundle (§1 keeps dependencies minimal). Proposal: stay on `clam`.
-- **Q-D5 (answered from the code).** The hotkey thread's window is a real hidden top-level window, not `HWND_MESSAGE`
-  (`platform/win_hotkey.py`), so it does receive the `WM_SETTINGCHANGE` broadcast. No change needed. `<FocusIn>` stays as a backup.
+Resolved by Archimedes in ARCHITECTURE.md §11 (5ef93d1). That section is binding.
+
+| # | Question | Resolution |
+|---|---|---|
+| Q-D1 | Window height | ✅ No "More…" area. Minimum **340 × 360**, grows to fit. The P1 ≤ 360×300 budget is superseded |
+| Q-D2 | `theme` in the settings schema | ✅ Added to §4 defaults (`"system"`), validated like other enums (unknown or wrong type → `system` + W3). No `schema` bump |
+| Q-D3 | Dark tray menu | ✅ Stays light (system default) in v0.x. No undocumented `uxtheme` ordinals |
+| Q-D4 | Theme engine | ✅ Stdlib `clam` with our palette tokens. No `sv-ttk` |
+| Q-D5 | Message window receives broadcasts | ✅ Yes, it's a hidden top-level window (answered from the code) |
