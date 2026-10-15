@@ -235,7 +235,19 @@ Status: the spec is accepted (§4, §11), but on `main` at 54ba2fe **there's no 
 | WS-04c | Real small screen | 1366 × 768 @ 200 % (or 1280 × 720 @ 200 %), trigger the two-key W4. Hover the status | Window bottom stays above the taskbar. If it's truncated, `…` shows and the tooltip has the full W4 text | M |
 | WS-05 | Re-clamp after growth | Unit: window placed with its bottom 20 px above the work-area bottom, then status grows by 3 lines | `place_window((x,y),(w,h_capped),work_areas,primary)` runs after each height change: window moves **up** only as far as needed to stay inside the work area. It grows downward when there's room (§11 B-3) | A |
 | WS-05a | Taller than the area | Height capped to the area (WS-04) | Window pinned to the work area's top (`_clamp`) (§11 B-3) | A |
-| WS-05b | Temporary position not saved | After WS-05's automatic move, let the debounce pass, then check settings | `window_x`/`window_y` unchanged. Only a user drag saves a new position. After the status shrinks, the window doesn't jump back by itself unless spec says so (see C-1) | A + M |
+| WS-05b | Temporary position not saved | After WS-05's automatic move, let the debounce pass, then check settings | `window_x`/`window_y` unchanged. Only a user drag saves a new position. Clamp moves are never saved (§11 C-1) | A + M |
+| WS-06 | Return home after shrink | Unit: home (x,y) near the bottom, status grows → clamp moves the window up, then the status shrinks so it fits at home | Window moves back to **home**. `clamped_from` cleared. Settings unchanged throughout (§11 C-1, ux §1) | A |
+| WS-06a | User moved after clamp | As WS-06, but send a `<Configure>` with a position change **not** caused by our own `geometry()` call before the shrink | No jump back. The user's position becomes home and **is** saved (debounced). Our own `geometry()` Configure events must not count as user moves (§11 C-1) | A |
+| WS-06b | Shrink but still doesn't fit at home | Shrink only partly | Stays clamped. No move to home until it fits there (§11 C-1) | A |
+| WS-06c | Height rule | Table: required < 360, between, > work area | Height = `clamp(required, 360 logical, work-area cap)` (§11 C-1/B-2) | A |
+| WS-06d | Manual return | Drag the window low on a monitor, trigger the two-key W4, wait 15 s for it to expire. Repeat, but drag the window once while W4 is showing | First run: goes back to where you put it. Second run: stays where you dragged it, and that position survives a restart | M |
+| SR-01 | Accessible name = full text | Unit/A-win: set a long status that's visibly truncated (WS-04a) | The status label's window text (`SetWindowTextW` on `winfo_id()`) = the **full** message. Accessible Name and Description both full (§11 C-2) | A + A-win |
+| SR-02 | One event per distinct message | Fake `NotifyWinEvent`: set message A, re-wrap, resize, theme change, set A again, set B | Exactly one `EVENT_OBJECT_NAMECHANGE` (`OBJID_CLIENT`, `CHILDID_SELF`) for A and one for B. None for re-wrap, resize, theme or an identical repeat (§11 C-2) | A |
+| SR-03 | Status in tab order | Tab through the window | Status line receives focus right **after** Reconnect (`takefocus=1`), then the tab order continues as in ux §1.1 (§11 C-2) | A + M |
+| SR-04 | Narrator announcement | Narrator on (Ctrl+Win+Enter). Focus Start. Trigger W7/W4 (hotkey conflict), then E4 (unplug a USB/loopMIDI device) | Narrator speaks each new message **once**, with the full text even when truncated. Nothing on window resize or theme change. **Gate** (§11 C-2) | M |
+| SR-05 | NVDA announcement | Same as SR-04 with NVDA (latest stable) | Same. Also check NVDA's object navigation reads the full text. **Gate** | M |
+| SR-06 | Re-read by keyboard | Narrator and NVDA: Tab to the status line | Full message read, including truncated text | M |
+| SR-07 | Fallback if not announced | If SR-04 or SR-05 fails | Fallback per §11 C-2: the status stays focusable, **and** every error (E-code) also shows as a tray balloon. Check that Narrator/NVDA announce the balloon. Record "status change not announced by <reader>" as a known limitation in the RC checklist and README | M |
 | WS-05c | Manual edge case | Drag the window near the bottom of a monitor, trigger W4 | Window moves up to stay on screen. Quit + relaunch: opens at the dragged position, not the moved one | M |
 
 ## 8. Other §9 risks
@@ -308,8 +320,69 @@ B-1 – B-4 were answered in **§11** (commit 35c01d7) and docs/ux.md §1: B-1 �
 
 Still open:
 - **B-5 Instrument audition:** there's no CLI flag or preset to play one GM program directly. A `--play-instrument N` (or similar) flag would make the RC listen check one click.
-- **C-1 Restoring after a temporary move:** B-3 says the moved position isn't saved, but not whether the window should return to its pre-growth position on screen once the status shrinks again.
-- **C-2 Truncation and screen readers:** the tooltip and log carry the full text (B-2). Is the status label's accessible name the full or the truncated text?
+C-1 and C-2 were answered in §11 (25fff82) and ux §1: C-1 → WS-05b, WS-06–WS-06d; C-2 → SR-01–SR-07.
 
-### Pending: cell granularity (CG-G1)
-On hold until Archimedes revises #23 (slots from UI Automation button/tray rects, `taskbar_slot_source: auto|uia|fixed`, every taskbar on any monitor). The TB-xx cases will be written against that revision.
+## 11. Taskbar zone / cell granularity (CG-G1)
+
+Spec: `docs/design/cell-granularity.md` (merged with #23), sections §4.1 keys, §4.2 geometry, §4.2a UI Automation slot source, §4.3 mapping. Notation: §CG-4.2a = that design doc's section. UIA class names come from [`taskbar-uia-notes.md`](taskbar-uia-notes.md) (CG-G2). Christopher's Windhawk setup isn't confirmed yet (TB-P1).
+
+Common setup: `taskbar_mode: true`, `--dry-run --log-level debug` (logs the slot source and rects), loopMIDI → MIDI-OX to see notes and program changes.
+
+### Slot source (`taskbar_slot_source`)
+| ID | Case | Steps | Expected | Type |
+|---|---|---|---|---|
+| TB-01 | Validation | `auto`, `uia`, `fixed`, `"UIA"`, `"x"`, `1`, missing | Valid values kept. Default `auto`. Invalid → `auto` + W3 (§CG-4.1). Case handling unspecified, see D-1 | A |
+| TB-02 | `auto`, stock taskbar | Stock Win11, left alignment, 10 pinned icons, 100 % | One cell per visible app button **and** per tray item (one per `Taskbar.TaskListButtonAutomationPeer`, plus Start/Search/Task View, plus each `SystemTray.*` button). Log says source = uia (§CG-4.2a) | M + A (snapshot) |
+| TB-03 | `uia` only, success | Same as TB-02 with `uia` | Same cells as TB-02 | M |
+| TB-04 | `fixed` | Set `fixed` | Slot width = `round(taskbar_slot_dip × dpi/96)` from the bar's left edge + offset. Tray from `TrayNotifyWnd` with `taskbar_tray_slot_dip`. Reader never called (fake asserts no call) (§CG-4.2a) | A + M |
+| TB-05 | Snapshot → cells | Recorded rect lists: stock, ~20 custom-size icons + 8 tray + clock, mixed widths, gaps, empty | One cell per rect. App notes ascend from `taskbar_low_note`, tray notes descend from `taskbar_high_note`. Gaps silent. 2 px hysteresis at each rect edge (§CG-4.2a, 4.3) | A |
+| TB-06 | Non-matching or off-bar elements | Snapshot with zero-size rects, `IsOffscreen` items, rects outside the taskbar rect, overflow-flyout items | Ignored. Only visible rects inside the bar become slots (§CG-4.2a) | A |
+
+### UIA failure and fallback
+| ID | Case | Steps | Expected | Type |
+|---|---|---|---|---|
+| TB-10 | COM error | Fake reader raises | `auto`: previous snapshot kept; after 2 failures in a row → fixed slots for that taskbar. `uia`: zone inactive for that taskbar, desktop mapping applies. No user message, logged at info (§CG-4.2a) | A |
+| TB-11 | Empty result | Fake reader returns 0 matches | Same as TB-10 (zero matches counts as failure) | A |
+| TB-12 | Timeout | Fake reader blocks > 1 s | Scan abandoned at 1 s. Engine never blocked (runs on the `taskbar-scan` thread). Previous snapshot used | A |
+| TB-13 | Slow scans → backoff | Fake reader takes 200 ms | Interval doubles up to 30 s. Recovers after 3 fast scans (< 150 ms) | A |
+| TB-14 | Stale rects after Explorer restart | Fake: after `TaskbarCreated`, old element refs return `UIA_E_ELEMENTNOTAVAILABLE` or the old rects | A rescan is triggered (debounced 250 ms) using a fresh `ElementFromHandle` on the **new** HWNDs. Stale rects never kept for more than one rescan. See D-2 | A |
+| TB-15 | Explorer restart, real | Playing on the taskbar: Task Manager → Windows Explorer → Restart | No crash, no stuck note. Zone inactive (desktop mapping) while Explorer is down. Back within ~1 s of the taskbar reappearing (`TaskbarCreated`), with the same notes per icon (§CG-4.2, 4.2a) | M |
+| TB-16 | Explorer replacement | If available: ExplorerPatcher Win10 taskbar or StartAllBack | `auto` → fixed slots (no XAML peers). No error. `uia` → zone inactive | M (optional) |
+| TB-17 | Kill Explorer mid-play | `taskkill /f /im explorer.exe`, wait 5 s, `start explorer` | As TB-15. Nothing logged above info | M |
+| TB-18 | Cost | `--log-level debug`, 2 min playing in taskbar mode | Scan < 30 ms typical. CPU < 2 % overall (LT-06). Scans only while playing (none while stopped or with the mode off) | M + A |
+
+### Icon size: custom and Windhawk
+| ID | Case | Steps | Expected | Type |
+|---|---|---|---|---|
+| TB-20 | Windhawk icon size | Windhawk "Taskbar height and icon size" mod: button width 44 → 32 and 60, icon 24 → 16 and 32 | `auto`: exactly one cell per visible icon at every size. `fixed` at the default 48 shows the misalignment (that's why UIA is the default) | M |
+| TB-21 | Windhawk tray spacing | "Taskbar tray icon spacing and grid" mod: tray width 32 → 24 and 18. Also 2 rows | One cell per tray icon in 1 row. 2-row grid: record behaviour, see D-3 | M |
+| TB-22 | Christopher's setup | **Pending (TB-P1)**: his Windhawk mods with ~20 left-aligned icons and ~8 tray icons plus the clock | Every icon and tray icon gets its own cell (`--self-test` slot dump). Recorded once the setup is confirmed | M (pending) |
+| TB-23 | Small taskbar buttons | Registry/small-button variant where available (24H2 removed `TaskbarSi`; use the Windhawk mod) | Same as TB-20 | M |
+
+### Monitors, scaling and placement
+| ID | Case | Steps | Expected | Type |
+|---|---|---|---|---|
+| TB-30 | 2 monitors, 100 % + 150 % | Taskbars on both ("Show my taskbar on all displays"), left alignment | Each taskbar anchored to its own left edge with its own DPI. Slot k has the same pitch on both bars and a different program (primary `taskbar_program`, secondary the next in `taskbar_secondary_programs`). Same icon → same note after restart (§CG-4.2, 4.2a, 4.3) | M + A |
+| TB-31 | 3+ monitors | 3 (or 4) monitors, taskbar on all. If unavailable: A test with 4 fake taskbars | Every taskbar is a zone. Order = primary first, then secondaries by monitor `(left, top)`. Each secondary gets the next program. Status `Taskbar n/k` (§CG-4.2a) | A + M |
+| TB-32 | Secondary left of primary | Secondary at negative X | Zone works with negative coordinates. Order still by `(left, top)` | A + M |
+| TB-33 | "All displays" toggled at runtime | Turn off, then on, while playing | Off → only the primary zone. On → secondary zones within one refresh (`WM_SETTINGCHANGE`/2 s) | M |
+| TB-34 | Taskbar moved to another monitor | Change the main display so the primary taskbar moves | Zones rebuilt. No crash. `taskbar_monitors` (`primary`/`all`) honoured | M |
+| TB-35 | Mixed DPI rects | UIA rects on a 150 % secondary | Rects are physical px (UIA BoundingRectangle is physical screen coordinates for a per-monitor-aware client) and line up with the cursor. A dot-check: hover each icon edge, cell changes within 2 px | M + A-win |
+
+### Alignment, auto-hide, tray
+| ID | Case | Steps | Expected | Type |
+|---|---|---|---|---|
+| TB-40 | Centered icons | Alignment: Center. Open and close apps | Deterministic: notes follow rect positions and slots move as icons move. No errors. Notes for a given app may change, which is documented (§CG-1, 4.3) | M |
+| TB-41 | Auto-hide | Turn on "Automatically hide the taskbar" | Hidden: cursor at the screen edge maps the slot under it (or the desktop) without errors. Shown: same cells as visible. No rescan storm (check scan count in the log) | M |
+| TB-42 | Tray anchoring | Hover each tray icon, the clock and the chevron, right → left | Distinct notes descending from `taskbar_high_note`, with slot 1 = the right-most item (§CG-4.3 3a) | M + A |
+| TB-43 | Tray stability | Open and close apps | Tray notes don't change | M + A |
+| TB-44 | Add/remove a tray icon | Start or quit an app with a tray icon | Only slots **left** of it shift. The clock and the right-most icons keep their notes | M + A |
+| TB-45 | Overflow flyout | Open "Show hidden icons" | Flyout icons (separate overflow window) are **not** slots. The chevron itself is one slot | M |
+| TB-46 | Secondary tray | Hover the clock on a secondary taskbar | Clock is a tray slot if found (`SystemTray.OmniButton*`). Otherwise the bar has no tray part, with no error | M |
+| TB-47 | Mode off | `taskbar_mode: false` | Mapping identical to desktop mapping (property test). No UIA load, no scan thread | A |
+
+### Pending
+- **TB-P1:** confirm Christopher's Windhawk mods and versions, and record the UIA dump (Accessibility Insights) of his taskbar with them on (CG-G2 AC). Not done; he hasn't been contacted.
+- **D-1** `taskbar_slot_source` case handling: theme is case-insensitive (B-1). Same rule here?
+- **D-2** Explorer restart: the design says "deactivates until the next refresh" plus a `TaskbarCreated` rescan. Should a scan that hits `UIA_E_ELEMENTNOTAVAILABLE` force a fresh `ElementFromHandle` right away, without counting as one of the "2 failures"?
+- **D-3** Multi-row tray (Windhawk grid): the slot rule is one-dimensional (right → left). How should 2-row tray rects be ordered?
