@@ -166,7 +166,8 @@ Defaults:
   "first_run_done": false,
   "tray_hint_shown": false,
   "window_x": null,
-  "window_y": null
+  "window_y": null,
+  "theme": "system"
 }
 ```
 
@@ -178,6 +179,10 @@ Key notes (added after the UX review of PR #1):
   current monitor's work area (`MonitorFromPoint(..., MONITOR_DEFAULTTONULL)`), centre instead and don't overwrite
   until the window is moved.
 - `tray_hint_shown` is set after the first close-to-tray balloon. It is separate from `first_run_done`.
+- `theme` ∈ `system` | `light` | `dark` (default `system`, resolved from `AppsUseLightTheme`; Windows high contrast
+  overrides it). An unknown value or wrong type → `system` + W3. Adding it needs no `schema` bump (older builds ignore
+  unknown keys).
+- `hotkey`: normalised (`alt+ctrl+m` → `Ctrl+Alt+M`). `Off`/empty/`none` = disabled. Invalid → default + W3 (§11 S-3).
 - A fallback device (saved device missing) is **not** written to `midi_device`. Only an explicit user pick writes it.
 
 Pentatonic is the default because every note sounds consonant with every other, which makes the best first impression.
@@ -400,7 +405,7 @@ binding. Where one overlaps an earlier section, this section wins.
 | OQ-2 | Accepted limitation. A hard kill relies on WinMM closing the handle. Downstream receivers of virtual or hardware ports may keep a stuck note, and we can't prevent that from a killed process. This is documented in the README troubleshooting (`#no-sound`: "send All Notes Off / restart the receiver"). SN-07 records the result and doesn't block the release. |
 | OQ-3 | Handle sleep/resume. On `WM_POWERBROADCAST` `PBT_APMSUSPEND`: run the full silence path and close the device, remembering whether it was playing. On `PBT_APMRESUMEAUTOMATIC`: reopen the device and resume **only if it was playing**. If the reopen fails → E4. The hotkey thread's message window receives the broadcast and posts commands to the engine. |
 | OQ-4 | Release gate on VirusTotal: **≤ 3 detections** on the exe **and** none from Microsoft Defender. More than 3 (or any Defender hit) blocks the release until a false-positive submission clears it or the build is changed. The zip follows the same rule. The counts are recorded in the RC checklist. |
-| OQ-5 | If `RegisterHotKey` fails → W4 (status line, 15 s) and the Start hint reads `(shortcut off)`. The `hotkey` key stays **file-only** in v0.1 (format `Ctrl+Alt+M`, modifiers Ctrl/Alt/Shift/Win plus one A–Z/0–9/F1–F12 key). An unparsable value → W4 and the default is not used. |
+| OQ-5 | If `RegisterHotKey` fails → W4 (status line, 15 s) and the Start hint reads `(shortcut off)`. Before W4, the `Ctrl+Alt+Shift+M` fallback is tried (W7 when it is used; W4 only if both fail). *Revised after rc2:* `hotkey` is settable in the window (Shortcut picker) and in the file (format `Ctrl+Alt+M`, modifiers Ctrl/Alt/Shift/Win in any order/case plus one A–Z/0–9/F1–F12 key, or `Off`). Valid values are normalised by the same parser used for registration (`platform/hotkey.py`); an unparsable value resets to the default `Ctrl+Alt+M` and is reported via W3, like any other invalid setting. |
 | OQ-6 | Targets: **internal** cell-change → `short_msg` ≤ 1 tick (8 ms) outside rate limiting (blocking, automated). **Tick jitter** on real Windows with `timeBeginPeriod(1)`: p95 ≤ 4 ms, max ≤ 20 ms over 60 s (blocking). **End-to-end on the GS synth**: median ≤ 100 ms, p95 ≤ 150 ms on wired output (informational, not blocking). If the median is over 100 ms on most test machines, G4 recommends in-process synthesis. |
 | OQ-7 | Over a 30-min soak: working set grows ≤ **10 MB** over the post-warm-up value at 2 min. Handle count grows ≤ **50**. Thread count is constant. CPU stays < 2 %. Anything over these is a blocker. |
 | OQ-8 | Validation ranges: `volume` 0–100. `velocity` 1–127. `note_length_ms` 50–2000. `poll_hz` 30–250. `low_note`/`high_note` 0–127. Each key is clamped independently. If `high_note - low_note < 12` after clamping: keep `low_note` and set `high_note = min(127, low_note + 12)`; if that still gives less than 12, set `low_note = high_note - 12`. Wrong types or unknown enums → that key's default, with warning W3. |
@@ -408,3 +413,55 @@ binding. Where one overlaps an earlier section, this section wins.
 | OQ-10 | Repeated corruption overwrites the single `settings.json.bak` (keep the latest one only, no accumulation). The overwrite is logged. |
 | OQ-11 | Unwritable location → W5 once per session, settings stay in memory, a retry happens on the next change, path and error are logged. No fallback to another location (no silent portable→APPDATA switch). |
 | OQ-12 | Yes. Start (and Reconnect) re-enumerates and opens the **saved** `midi_device` by name if present, even if a fallback was used earlier in the session. W1 clears once it's found. No background hot-plug watching. |
+
+### Dark mode (PR #22, issue #21)
+
+| # | Decision |
+|---|---|
+| Q-D1 | No "More…" area. Since #19 the window is a **minimum** of 340 × 330 logical px and grows to fit; the `Theme` row makes the minimum **340 × 360** (Shortcut + Theme rows). The P1 ≤ 360×300 budget is superseded: width stays 340 and the minimum height is 360. The status line still grows past that for long warnings. |
+| Q-D2 | Accepted: `theme` is added to §4 defaults (`"system"`) and validated like other enums (unknown/wrong type → `system` + W3). No `schema` bump. |
+| Q-D3 | The tray menu stays light (system default) in v0.x. No undocumented `uxtheme` ordinals. |
+| Q-D4 | Stay on stdlib `clam` with our palette tokens. No `sv-ttk` (keeps dependencies, bundle size and AV surface minimal, §1). Reconsider only if there's a v1 visual refresh. |
+
+### Test-plan ambiguities (A-1 – A-8)
+
+| # | Decision |
+|---|---|
+| A-1 | Resume = `PBT_APMRESUMEAUTOMATIC` **or** `PBT_APMRESUMESUSPEND` (as implemented). Duplicates and repeats are idempotent. Hibernate uses the same path. On Modern Standby (S0) the app may get no suspend at all: that's acceptable, because the engine keeps running and WinMM stays open. If a send then fails, E4 applies. A resume while **stopped** does **not** open the device; it stays closed until Start. SN-09f records behaviour and doesn't block. |
+| A-2 | Yes. The message window and its thread are created regardless of `RegisterHotKey` failing (or `Off`). Power, session and theme broadcasts keep working. Required; add a test. |
+| A-3 | The formula is `round(volume*127/100)`. For integer volumes 0–100 the only exact .5 case is 50 (63.5), which goes to 64 under both half-even and half-up, so the two rules are equivalent. Half-up is the documented intent and there's no code change. VO-02 stays as is. |
+| A-4 | `bool` = wrong type → default 80 + W3. A finite float is a number: rounded, then clamped (55.5 → 56). NaN/inf → default + W3. The same rule applies to every integer setting. |
+| A-5 | Yes. `set_volume` goes through the engine command queue and is coalesced to the latest value, so at most one CC7 per tick (≤ 125/s at 125 Hz). The file save stays debounced at 500 ms. |
+| A-6 | The **user-facing W/E codes and copy** are owned by `docs/ux.md` and are its source of truth. ARCHITECTURE defines only the triggering conditions. Tests reference the IDs; copy changes go through a ux.md PR that updates tests in the same PR. |
+| A-7 | "Constant thread count" means **long-lived** threads (main/Tk, engine, tray, message window). Transient threads (balloons, the settings-save debounce timer) are excluded, but must exit: the count at the end of the soak, after 10 s idle, must equal the count at the 2-min baseline. |
+| A-8 | Yes. A Defender hit on any file inside the zip counts as a Defender hit and blocks the release. The ≤ 3 VirusTotal rule is counted on the zip itself as VirusTotal reports it. |
+
+### PR #10 (S5) assumptions
+
+| # | Verdict |
+|---|---|
+| S-1 | **Ratified.** Volume changes merge to one CC7 per tick, latest wins (= A-5). |
+| S-2 | **Ratified.** After wake, the device is reopened only if it was playing before sleep; otherwise it stays closed until Start (= A-1, OQ-3). |
+| S-3 | **Ratified, settled by #19 and supersedes OQ-5.** Try the configured hotkey, then fall back to `Ctrl+Alt+Shift+M` (W7). W4 only if both fail. `Off` disables it. `hotkey` is now editable in the UI (Shortcut row) and validated; invalid → default + W3. |
+
+### Test-plan ambiguities (B-1 – B-4)
+
+| # | Decision |
+|---|---|
+| B-1 | `theme` is case-insensitive: strip whitespace and lowercase it before validating (`" Dark "` → `dark`). Anything not in `system`/`light`/`dark` after that, or a non-string → `system` + W3. The file is written back in canonical lowercase on the next save. |
+| B-2 | The status wraps, and the window grows from the 360 minimum up to the **work-area height of its current monitor** (`rcWork`, so the taskbar is never covered). Past that cap the status label is **truncated** to the whole lines that fit, the last ending in `…`. The full text goes in the status tooltip and the log. **No scrolling:** a scrollable status line in a 340-px window is awkward for keyboard and screen-reader users, and it hides that there's more. Realistically the cap only matters at 200–300 % scaling on very small screens, since the longest current message (W4) is three lines. |
+| B-3 | Yes, reuse it. `ui/placement.py` exists, is pure and tested, and already clamps against **work areas** (`monitor_work_areas` → `rcWork`). `_clamp` pins the window to the area's top when it's taller than the area, which is consistent with the B-2 cap. Today `Window._fit()` resizes in place without re-clamping, so Sprite must call `place_window((x, y), (w, h_capped), work_areas, primary)` after each height change, with the height already capped per B-2. The window grows downward and moves up only as far as needed, and the moved position isn't saved unless the user moves the window. |
+| B-4 | `docs/ux.md` §1 is now "minimum 340 × 360, grows to fit" (it said 340 × 300 fixed). Main's code still has `HEIGHT = 330` in `ui/window.py`. Sprite changes it to 360 when the Theme row (PR #22) lands, or earlier. |
+
+### Test-plan ambiguities (C-1 – C-2)
+
+| # | Decision |
+|---|---|
+| C-1 | The window keeps a **home position** (the last position the user chose, or the restored or centred one) separate from its **current** position. A B-3 clamp moves only the current position and records `clamped_from = home`. When the status shrinks and the window fits at home again, it moves back to home, **unless the user moved the window since the clamp** (detected via `<Configure>` with a position change not caused by our own `geometry()` call). In that case the new position becomes home and nothing jumps. Clamp moves are never saved to `window_x`/`window_y`; only user moves are. Height always follows content: `clamp(required, min 360 logical, work-area cap)`. |
+| C-2 | The full message is the status line's accessible name **and** description, even when visibly truncated (B-2). It's announced **once** per distinct message, never on re-wrap, resize or theme change. Mechanism: Python 3.12's Tk 8.6 has no accessibility API, so Sprite adds a small Win32 helper: set the status label's child-window text (`SetWindowTextW` on `winfo_id()`, which MSAA/UIA expose as the Name), then `NotifyWinEvent(EVENT_OBJECT_NAMECHANGE, …, OBJID_CLIENT, CHILDID_SELF)` once on change. The status label is also put **in the tab order** (`takefocus=1`, after Reconnect), so the text can always be re-read by keyboard even if a screen reader ignores the event. **Gate:** Grace verifies with Narrator and NVDA. If the event isn't announced, the fallback is to keep the focusable status and additionally show error (E-code) messages as a tray balloon, which Windows screen readers do announce, and log it as a known limitation. |
+
+### Cell granularity (issue #16)
+
+| # | Decision |
+|---|---|
+| CG | **Proposed** in [docs/design/cell-granularity.md](docs/design/cell-granularity.md): an optional taskbar zone (`taskbar_mode`, default off). One cell per real taskbar/tray icon rectangle read with UI Automation (`taskbar_slot_source: auto`; fixed 48 DIP × DPI slots as the fallback), on every taskbar on any number of monitors, with its own instrument (`taskbar_program`). It wraps octaves past `taskbar_high_note`. The desktop mapping is unchanged. Targets left-aligned icons on a bottom taskbar (Windows 11 can't dock left). Covers all monitors' taskbars (`taskbar_monitors: all`, each one anchored and DPI-scaled separately, told apart by instrument) and the tray (right-anchored). Pitch bend rejected. A fixed desktop `cell_width_dip` is phase 2. |

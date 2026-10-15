@@ -70,7 +70,7 @@ Tools: loopMIDI (virtual port), VirtualMIDISynth (alternative synth), MIDI-OX or
 | DM-11 | Hot-plug | While playing, unplug the secondary monitor, then plug it back | Within ~2 s (or on `WM_DISPLAYCHANGE`) the mapping uses the new rect. No exception (§9) | M + A (fake metrics changing mid-path, G2) |
 | DM-12 | Resolution / scale change at runtime | Change the scale 100%→150% in Settings while it's running | Mapping recomputed. Tk window still crisp (P2 AC) | M |
 | DM-13 | `screen_mode: primary` | Set `primary` on E3 and move onto the secondary | Cursor clamped to the primary rect (§5.1) | A + M |
-| DM-14 | UI crispness | E2 @100/150/200% | Window isn't blurry. Fits within ≤ 360×300 logical (P1/P2) | M |
+| DM-14 | UI crispness | E2 @100/150/200% | Window isn't blurry. Minimum 340 × 360 logical px, with the status line allowed to grow past that (§11 Q-D1). See TH-10 | M |
 
 ## 4. Stuck notes (§2 item 4, §5 "Stop / Quit / device change / exception", §6 shutdown, §9 "Stuck notes")
 
@@ -88,12 +88,13 @@ with legato **off** and **on** (legato holds notes indefinitely, so it's the wor
 | SN-07 | Hard kill | Hold a legato note and run `taskkill /F /IM MouseMusic.exe` | The note stops. WinMM resets when the process closes the handle (§9). Also run it on loopMIDI→DAW. A downstream stuck note there is an **accepted limitation**: record it, don't block on it. The README `#no-sound` must describe the workaround (§11 OQ-2) | M (non-blocking) |
 | SN-08 | Logoff / shutdown | Hold a note and sign out | `WM_ENDSESSION` path silences the output (§9) | M |
 | SN-09 | Sleep while playing | Playing (legato on, note held). Start → Sleep, then wake | On suspend: full silence path (note-off → CC123 → reset) and device closed. On resume: device reopened and playback **resumes** (§11 OQ-3). No drone at any point | M |
-| SN-09a | Sleep while stopped | Stopped. Sleep, then wake | Device reopened (or left closed until Start) but playback does **not** start. No sound on wake (§11 OQ-3) | M |
+| SN-09a | Sleep while stopped | Stopped. Sleep, then wake | The device stays **closed** until Start (MIDI-OX or loopMIDI shows no open). Playback does not start. No sound on wake (§11 A-1, S-2) | A + M |
 | SN-09b | Resume reopen fails | Playing via loopMIDI. Sleep, delete the port (or unplug the USB device) while asleep, wake | E4 shown. App stopped. No crash (§11 OQ-3) | M |
 | SN-09c | Suspend/resume commands (unit) | Post `suspend`/`resume` commands to the engine with a fake MIDI device, both playing and stopped. Also resume with open failing | Exact silence sequence plus close on suspend. Was-playing flag honoured. E4 on failure. Commands handled on the engine thread (§6, §11 OQ-3) | A |
-| SN-09d | Broadcast plumbing | Send `WM_POWERBROADCAST`/`PBT_APMSUSPEND` and `PBT_APMRESUMEAUTOMATIC` to the hotkey thread's message window (e.g. with a `PostMessage` test harness, or `pwrtest /sleep` from the WDK) | Commands posted to the engine (§11 OQ-3) | A-win / M |
+| SN-09d | Broadcast plumbing | Send `WM_POWERBROADCAST`/`PBT_APMSUSPEND` and `PBT_APMRESUMEAUTOMATIC` to the hotkey thread's message window (e.g. with a `PostMessage` test harness, or `pwrtest /sleep` from the WDK) | Commands posted to the engine. Both `PBT_APMRESUMEAUTOMATIC` and `PBT_APMRESUMESUSPEND` mean resume, and repeats are idempotent (§11 A-1) | A-win / M |
+| SN-09g | Message window with no hotkey | Set `hotkey` to `Off`, **and** separately make both Ctrl+Alt+M and Ctrl+Alt+Shift+M fail (W4). Then send the suspend/resume, `WM_ENDSESSION` and `WM_SETTINGCHANGE` (theme) messages | The message window and its thread exist anyway. Power, session and theme handling still work. Required test (§11 A-2) | A-win + M |
 | SN-09e | Repeated sleep cycles | Run 5 sleep/wake cycles while playing, then check handles | Handle and thread counts stable (ties to the §11 OQ-7 limits) | M |
-| SN-09f | Modern Standby / hibernate | Repeat SN-09 on a Modern Standby (S0) laptop and with Hibernate | Record the behaviour. See ambiguity A-1 | M |
+| SN-09f | Modern Standby / hibernate | Repeat SN-09 on a Modern Standby (S0) laptop and with Hibernate | Hibernate takes the same path as sleep. On S0, no suspend may arrive at all, which is acceptable: the engine keeps running and if a send fails, E4 applies. Record the behaviour, non-blocking (§11 A-1) | M (non-blocking) |
 | SN-10 | Device lost while sounding | See MD-09/MD-10 | No drone on the remaining or reattached device | M |
 | SN-11 | Rapid start/stop | Toggle the hotkey 50× fast while moving | No stuck notes. No exceptions (G2 edge case) | A + M |
 | SN-12 | Note-length expiry | `note_length_ms=250`, legato off, cursor still | Note-off about 250 ms after note-on, within one tick (8 ms at 125 Hz) (§6) | A |
@@ -109,16 +110,16 @@ with legato **off** and **on** (legato holds notes indefinitely, so it's the wor
 | SD-03 | Checksums | `Get-FileHash -Algorithm SHA256` on both artifacts | Matches `SHA256SUMS.txt` | M |
 | SD-04 | Defender realtime | E5 with Defender on: download, run, use for 5 min | Not quarantined. No detection in Protection history | M |
 | SD-05 | Defender manual scan | `MpCmdRun.exe -Scan -ScanType 3 -File <exe>` and the same on the extracted zip | No threats | M |
-| SD-06 | VirusTotal | Upload the exe and the zip | Record the detection count and vendor names in the release PR. **Gate:** ≤ 3 detections **and** zero from Microsoft Defender, for the exe and the zip separately. Otherwise it blocks until a false-positive submission clears it or the build changes (§11 OQ-4) | M (blocking) |
+| SD-06 | VirusTotal | Upload the exe and the zip | Record the detection count and vendor names in the release PR. **Gate:** ≤ 3 detections **and** zero from Microsoft Defender, for the exe and the zip separately. The zip's count is what VirusTotal reports for the zip itself. A Defender hit on **any file inside** the zip also blocks (§11 A-8). Otherwise it blocks until a false-positive submission clears it or the build changes (§11 OQ-4) | M (blocking) |
 | SD-07 | UPX disabled | Inspect the spec (`upx=False`). Check the exe for UPX section names | No UPX (§7) | M (review) |
 | SD-08 | Onefile extraction | Launch the onefile exe and watch `%TEMP%\_MEI*` | Extracted on launch and removed after a clean Quit. Startup < 3 s on a clean VM (S7 AC) | M |
 | SD-09 | `_MEI` cleanup after a kill | `taskkill /F`, then check `%TEMP%` | Record whether a `_MEI*` dir is left behind (known PyInstaller behaviour). Not blocking unless it grows on every run | M |
 | SD-10 | Portable zip fallback | Unzip the onedir zip and run it | Works the same. This is the documented fallback if AV objects (§7) | M |
 | SD-11 | No hooks | Review: no `SetWindowsHookEx`/pynput imports. Only `GetCursorPos` + `RegisterHotKey` (§1, §9) | Passes | M (code review) + A (optional grep test) |
 | SD-12 | Single instance | Launch the exe twice | Second launch focuses the first window and exits. Named mutex `Local\MouseMusicV2` (§9) | M |
-| SD-13 | Hotkey conflict | Another app already owns Ctrl+Alt+M (e.g. a tiny `RegisterHotKey` helper script). Launch | App runs. W4 in the status line for 15 s. Start hint reads `(shortcut off)` (§11 OQ-5) | M |
-| SD-14 | Hotkey parsing | Table tests: `Ctrl+Alt+M`, `Shift+Win+F12`, `Ctrl+0`, then invalid values (`Ctrl+Alt`, `Hyper+M`, `Ctrl+F13`, `Ctrl+MM`, `""`, `123`) | Valid ones parse (modifiers Ctrl/Alt/Shift/Win + one A–Z/0–9/F1–F12). Invalid → W4, **no** hotkey registered, the default is **not** substituted (§11 OQ-5) | A |
-| SD-15 | Hotkey is file-only | Check the UI | There's no hotkey control in v0.1. Editing the file + restart changes it (§11 OQ-5) | M |
+| SD-13 | Hotkey conflict | Another app already owns Ctrl+Alt+M (e.g. a tiny `RegisterHotKey` helper script). Launch | App runs. `Ctrl+Alt+Shift+M` is used instead: W7 for 15 s, hint/status/tray tooltip show it. With the fallback also taken: W4 for 15 s and the hint reads `(shortcut off)` (§11 OQ-5) | M |
+| SD-14 | Hotkey parsing | Table tests: `Ctrl+Alt+M`, `Shift+Win+F12`, `Ctrl+0`, then invalid values (`Ctrl+Alt`, `Hyper+M`, `Ctrl+F13`, `Ctrl+MM`, `""`, `123`) | Valid ones parse (modifiers Ctrl/Alt/Shift/Win + one A–Z/0–9/F1–F12) and are normalised in settings (`alt+ctrl+m` → `Ctrl+Alt+M`). `Off`/`""`/`none` → Off. Any other invalid value in settings.json → reset to `Ctrl+Alt+M` with W3 (§11 OQ-5, revised) | A |
+| SD-15 | Hotkey picker | Change the `Shortcut` combobox, including to `Off` | Re-registers immediately (works with the window hidden), persists across restart. Editing the file + restart also works (§11 OQ-5, revised) | M |
 
 ## 6. Latency, timing and CPU (§1, §6, §9 "GS Wavetable Synth latency", "Timer resolution / CPU", G4)
 
@@ -146,7 +147,7 @@ Targets come from §1/§5/§6/§9, the S5/S7 acceptance criteria, and **§11 OQ-
 | LT-05 | Bluetooth output | LT-03 on a Bluetooth headset | Record it. Expected to be worse (§9) | M (G4) |
 | LT-06 | CPU idle and playing | Process Explorer, 5 min stopped and 5 min continuous sweeping | ≈ 0% stopped. < 2% playing (S5 AC) | M |
 | LT-07 | Timer period released | `powercfg /energy` (or check the timer resolution) after Stop | 1 ms period not held while stopped (§6) | M |
-| LT-08 | 30-min soak | Scripted or manual continuous movement for 30 min | Sample the working set, handles, threads and CPU at 2 min (baseline) and at 30 min: WS ≤ baseline + 10 MB, handles ≤ baseline + 50, thread count unchanged, CPU < 2 %. Blocking (§11 OQ-7) | M |
+| LT-08 | 30-min soak | Scripted or manual continuous movement for 30 min | Sample the working set, handles, threads and CPU at 2 min (baseline) and at 30 min: WS ≤ baseline + 10 MB, handles ≤ baseline + 50, long-lived thread count (main/Tk, engine, tray, message window) unchanged, CPU < 2 %. Transient threads (balloons, save debounce) are excluded but must exit: after 10 s idle at the end, the total thread count equals the 2-min baseline. Blocking (§11 OQ-7, A-7) | M |
 | LT-09 | Startup time | E5, cold and warm, onefile and onedir | < 3 s (S7 AC) | M |
 
 ## 7. Settings corruption and persistence (§4, S3)
@@ -161,7 +162,7 @@ Targets come from §1/§5/§6/§9, the S5/S7 acceptance criteria, and **§11 OQ-
 | SC-06 | Out-of-range clamping | Each key independently, below and above its bounds: `velocity` (1–127), `note_length_ms` (50–2000), `poll_hz` (30–250), `low_note`/`high_note` (0–127), `volume` (0–100). Also each exact boundary | Clamped to the bound, independently per key (§11 OQ-8) | A |
 | SC-06a | Narrow / inverted range | `(60,65)` → `(60,72)`. `(120,100)` → `(120,127)` → then `low=115`. `(127,127)` → `(115,127)`. `(0,0)` → `(0,12)`. `(-5,300)` → `(0,127)` | Matches the §11 OQ-8 rule: keep low, `high=min(127,low+12)`, then `low=high-12` if still < 12 | A |
 | SC-07 | Unknown keys | Add `"foo": 1` | Ignored (§4) | A |
-| SC-08 | Unknown enum | `scale: "lydian"`, `instrument_set: "x"`, `screen_mode: "y"` | Reset to the default with W3 (§11 OQ-8) | A |
+| SC-08 | Unknown enum | `scale: "lydian"`, `instrument_set: "x"`, `screen_mode: "y"`, `theme: "blue"`, `theme: 1` | Reset to the default with W3; `theme` → `system` (§11 OQ-8, Q-D2) | A |
 | SC-09 | Wrong top-level type / BOM / non-UTF-8 | `[]`, a UTF-8 BOM, Latin-1 bytes | No crash. Corrupt path or parsed tolerantly; record which | A |
 | SC-10 | Future schema | `"schema": 99` with known and unknown keys | Known keys loaded and validated. File **not rewritten** (byte-identical after launch and Quit with no changes). Warning in the log, no UI message. After a user change, the save writes the current schema (§11 OQ-9) | A + M |
 | SC-10a | Old / missing schema | Remove `schema`, or set it lower than current | Migrations run in order (§11 OQ-9) | A |
@@ -185,9 +186,9 @@ file-only and fixed for every note-on.
 | ID | Case | Steps | Expected | Type |
 |---|---|---|---|---|
 | VO-01 | Default | No settings file | `volume` = 80. First CC7 value = 102 | A |
-| VO-02 | Scaling formula | Table: 0→0, 1→1, 50→64, 79→100, 80→102, 99→126, 100→127 | `round(v*127/100)`. Note Python's banker's rounding: 50 → 63.5 → **64** (even), so check the implementation matches (see A-3) | A |
+| VO-02 | Scaling formula | Table: 0→0, 1→1, 50→64, 79→100, 80→102, 99→126, 100→127 | `round(v*127/100)`. Half-up is the intent. For integers 0–100 the only .5 case is 50 → 64 under either rule, so no code change (§11 A-3) | A |
 | VO-03 | Range validation | `-1`, `101`, `1000`, `0`, `100` | Clamped to 0–100 (§11 OQ-8) | A |
-| VO-04 | Wrong type | `"loud"`, `null`, `[]`, `true`, `55.5` | Default 80 with W3 for non-numbers. Behaviour for float/bool: see A-4 | A |
+| VO-04 | Wrong type | `"loud"`, `null`, `[]`, `true`, `55.5` | `bool`, string, null, list → 80 + W3. A finite float is rounded, then clamped (55.5 → 56). NaN/inf → 80 + W3. The same rule applies to every integer setting (§11 A-4) | A |
 | VO-05 | Missing key only | Valid file without `volume` | 80, and other keys kept | A |
 | VO-06 | Corruption fallback | Malformed file | `.bak` + defaults → volume 80 (§4, §11 OQ-10) | A |
 | VO-07 | When CC7 is sent | Fake MIDI: open, Start, slider change while stopped, slider change while playing, device change, Reconnect, resume from sleep | CC7 on channel 0 at open, at Start and on each change. Never on channel 9. Sent through the engine thread (§6) | A |
@@ -196,8 +197,58 @@ file-only and fixed for every note-on.
 | VO-10 | Effect on a virtual port | loopMIDI → MIDI-OX | CC7 `B0 07 xx` values match VO-02 | M |
 | VO-11 | Persistence | Set 37, wait > 500 ms, Quit, relaunch | `volume: 37` in the file. Slider shows 37. First CC7 = 47 | A + M |
 | VO-12 | Debounced writes | Drag the slider quickly | CC7 sent live. One file write about 500 ms after the last change (§4) | A |
-| VO-13 | Rate of CC7 while dragging | Drag the slider fast while playing | No audible glitch or stall. Count the CC7s sent (see A-5) | M |
+| VO-13 | Rate of CC7 while dragging | Drag the slider fast while playing | No audible glitch or stall. At most one CC7 per tick (≤ 125/s), latest value wins. File save still debounced at 500 ms (§11 A-5, S-1) | A + M |
 | VO-14 | Keyboard access | Arrow keys on the slider | Changes the volume (P2) | M |
+
+## 7b. Theme / dark mode (§4 `theme`, §11 Q-D1–Q-D4, docs/ux.md §11 via PR #22)
+
+Status: the spec is accepted (§4, §11), but on `main` at 54ba2fe **there's no `theme` in the code yet** (no setting, no Theme row, window minimum 340×330). These cases are written against the spec and PR #22's ux §11, and become runnable when it's implemented.
+
+| ID | Case | Steps | Expected | Type |
+|---|---|---|---|---|
+| TH-01 | Default | No settings file | `theme` = `system`. No schema bump (`schema` stays 1) (§4, Q-D2) | A |
+| TH-02 | Validation (case-insensitive) | `"light"`, `"DARK"`, `" Dark "`, `"System\t"` | Stripped and lowercased → `light`/`dark`/`system`, **no** W3 (§11 B-1, ux §1) | A |
+| TH-02a | Invalid values | `"blue"`, `""`, `"   "`, `"dark mode"`, `1`, `null`, `true`, `["dark"]` | → `system` + W3 (§11 B-1) | A |
+| TH-02b | Canonical write-back | Load `" Dark "`, then change any setting so it saves | File now has `"theme": "dark"`. Without a change the file isn't rewritten (§11 B-1, OQ-9 no-rewrite rule) | A |
+| TH-03 | Older build ignores the key | Load a file with `theme` in an older build (or `validate` with an unknown key) | Ignored, no W3 (§4 unknown keys) | A |
+| TH-04 | System resolution | Windows Settings → Personalization → Colors: Light, then Dark, with `theme: system` | App palette follows `AppsUseLightTheme` | M |
+| TH-05 | Live follow | Switch Windows Light↔Dark with the app open (window visible and hidden) | Repaints without a restart (`WM_SETTINGCHANGE` "ImmersiveColorSet", with `<FocusIn>` as a backup, per PR #22). Title bar turns dark too (DWM attribute 20/19) | M |
+| TH-06 | Override | Pick Dark in the Theme row while Windows is Light, and the reverse | Override wins, applies live, and persists across a restart | A (controller) + M |
+| TH-07 | High contrast | Turn on a contrast theme (Settings → Accessibility → Contrast themes) | High contrast overrides `theme`: system colours are used and the palette is off (§4) | M |
+| TH-08 | Combobox popdowns | Dark mode: open each dropdown | Popdown list is dark and readable, including after a live switch (PR #22) | M |
+| TH-09 | Tray menu | Dark mode: right-click the tray icon | Menu stays the light system default. That's expected, not a bug (§11 Q-D3) | M |
+| TH-10 | Contrast | Run `tools/contrast.py` if present, or inspect palette tokens | Text ≥ 4.5:1, UI/focus ≥ 3:1, disabled controls exempt (PR #22) | A |
+| TH-11 | Status colours in dark | Trigger W3/W4/E4 in dark mode | Amber/red dots and text legible | M |
+| TH-12 | No new dependency | Check `requirements.txt` | No `sv-ttk`. Stays on stdlib `clam` (§11 Q-D4) | A (review) |
+| TH-13 | Theme broadcast without a hotkey | Covered by SN-09g | Theme change still followed with the hotkey `Off` or after W4 (§11 A-2) | A-win + M |
+
+### Minimum window size (§11 Q-D1)
+
+| ID | Case | Steps | Expected | Type |
+|---|---|---|---|---|
+| WS-01 | Minimum at 100 % | Launch with short status text | Client area 340 × 360 logical px (Shortcut + Theme rows). Width fixed at 340. Code check: `ui/window.py` minimum `HEIGHT` is 360, not the old 330 (§11 B-4, ux §1) | A (window test) + M |
+| WS-02 | Grows for long warnings | Trigger the two-key W4 (both shortcuts taken) | Height > 360 so every wrapped line is visible. Shrinks back to 360 once it clears | A + M |
+| WS-03 | DPI scaling | 150 % and 200 % | Size scales (≈ 510 × 540 and 680 × 720 physical). Nothing clipped | M |
+| WS-04 | Height cap = work area | Unit: fake work area shorter than the required height (e.g. 400 px) with a 5-line status | Height = work-area height of the **current monitor** (`rcWork`, taskbar never covered). Never taller (§11 B-2) | A |
+| WS-04a | Truncation | Same as WS-04 | Status shows only the whole lines that fit; the last ends in `…`. No scrollbar. The full text is in the status tooltip **and** the log (§11 B-2, ux §1/row 9) | A + M |
+| WS-04b | Truncation clears | Shorten the message (warning expires) or move to a taller monitor | Full text visible again, no `…`. Window shrinks back toward 360 (§11 B-2) | A |
+| WS-04c | Real small screen | 1366 × 768 @ 200 % (or 1280 × 720 @ 200 %), trigger the two-key W4. Hover the status | Window bottom stays above the taskbar. If it's truncated, `…` shows and the tooltip has the full W4 text | M |
+| WS-05 | Re-clamp after growth | Unit: window placed with its bottom 20 px above the work-area bottom, then status grows by 3 lines | `place_window((x,y),(w,h_capped),work_areas,primary)` runs after each height change: window moves **up** only as far as needed to stay inside the work area. It grows downward when there's room (§11 B-3) | A |
+| WS-05a | Taller than the area | Height capped to the area (WS-04) | Window pinned to the work area's top (`_clamp`) (§11 B-3) | A |
+| WS-05b | Temporary position not saved | After WS-05's automatic move, let the debounce pass, then check settings | `window_x`/`window_y` unchanged. Only a user drag saves a new position. Clamp moves are never saved (§11 C-1) | A + M |
+| WS-06 | Return home after shrink | Unit: home (x,y) near the bottom, status grows → clamp moves the window up, then the status shrinks so it fits at home | Window moves back to **home**. `clamped_from` cleared. Settings unchanged throughout (§11 C-1, ux §1) | A |
+| WS-06a | User moved after clamp | As WS-06, but send a `<Configure>` with a position change **not** caused by our own `geometry()` call before the shrink | No jump back. The user's position becomes home and **is** saved (debounced). Our own `geometry()` Configure events must not count as user moves (§11 C-1) | A |
+| WS-06b | Shrink but still doesn't fit at home | Shrink only partly | Stays clamped. No move to home until it fits there (§11 C-1) | A |
+| WS-06c | Height rule | Table: required < 360, between, > work area | Height = `clamp(required, 360 logical, work-area cap)` (§11 C-1/B-2) | A |
+| WS-06d | Manual return | Drag the window low on a monitor, trigger the two-key W4, wait 15 s for it to expire. Repeat, but drag the window once while W4 is showing | First run: goes back to where you put it. Second run: stays where you dragged it, and that position survives a restart | M |
+| SR-01 | Accessible name = full text | Unit/A-win: set a long status that's visibly truncated (WS-04a) | The status label's window text (`SetWindowTextW` on `winfo_id()`) = the **full** message. Accessible Name and Description both full (§11 C-2) | A + A-win |
+| SR-02 | One event per distinct message | Fake `NotifyWinEvent`: set message A, re-wrap, resize, theme change, set A again, set B | Exactly one `EVENT_OBJECT_NAMECHANGE` (`OBJID_CLIENT`, `CHILDID_SELF`) for A and one for B. None for re-wrap, resize, theme or an identical repeat (§11 C-2) | A |
+| SR-03 | Status in tab order | Tab through the window | Status line receives focus right **after** Reconnect (`takefocus=1`), then the tab order continues as in ux §1.1 (§11 C-2) | A + M |
+| SR-04 | Narrator announcement | Narrator on (Ctrl+Win+Enter). Focus Start. Trigger W7/W4 (hotkey conflict), then E4 (unplug a USB/loopMIDI device) | Narrator speaks each new message **once**, with the full text even when truncated. Nothing on window resize or theme change. **Gate** (§11 C-2) | M |
+| SR-05 | NVDA announcement | Same as SR-04 with NVDA (latest stable) | Same. Also check NVDA's object navigation reads the full text. **Gate** | M |
+| SR-06 | Re-read by keyboard | Narrator and NVDA: Tab to the status line | Full message read, including truncated text | M |
+| SR-07 | Fallback if not announced | If SR-04 or SR-05 fails | Fallback per §11 C-2: the status stays focusable, **and** every error (E-code) also shows as a tray balloon. Check that Narrator/NVDA announce the balloon. Record "status change not announced by <reader>" as a known limitation in the RC checklist and README | M |
+| WS-05c | Manual edge case | Drag the window near the bottom of a monitor, trigger W4 | Window moves up to stay on screen. Quit + relaunch: opens at the dragged position, not the moved one | M |
 
 ## 8. Other §9 risks
 
@@ -249,7 +300,9 @@ release. File an issue with repro steps.
 
 **Settings**
 - [ ] Corrupt file → `.bak` + defaults on the real exe (SC-02). Persistence across restart (SC-17). Portable mode (SC-15). Unwritable → W5 (SC-16)
-- [ ] Hotkey conflict → W4 + `(shortcut off)` (SD-13)
+- [ ] Hotkey conflict → W7 fallback, then W4 + `(shortcut off)` when both are taken (SD-13)
+- [ ] Dark mode and minimum window size (TH-04–TH-09, WS-01–WS-02)
+- [ ] Christopher's quick pass: [`rc-manual-checklist.md`](rc-manual-checklist.md)
 
 **Docs and UX**
 - [ ] README walk-through: download → sound in ≤ 2 min, timed: ___ (P4 AC)
@@ -257,15 +310,79 @@ release. File an issue with repro steps.
 
 Sign-off: Grace · date · build SHA · verdict (GO / NO-GO)
 
-## 10. Remaining ambiguities
+## 10. Resolved and remaining ambiguities
 
-§11 answers OQ-1–OQ-12. The text that replaced each placeholder cites the decision. These points still need a call:
+A-1 – A-8 were answered in **§11** (commit 5ef93d1) and are applied in the cases above: A-1 → SN-09a/09d/09f; A-2 → SN-09g/TH-13; A-3 → VO-02; A-4 → VO-04; A-5 → VO-13; A-6 → see below; A-7 → LT-08; A-8 → SD-06.
 
-- **A-1 Sleep variants:** §11 OQ-3 names `PBT_APMSUSPEND`/`PBT_APMRESUMEAUTOMATIC` only. On Modern Standby (S0) machines these may not arrive the same way, and it's unspecified whether hibernate and a resume via `PBT_APMRESUMESUSPEND` without `…AUTOMATIC` are covered. It's also unclear whether a resume while **stopped** reopens the device or leaves it closed until Start.
-- **A-2 Suspend/resume vs the hotkey failing:** the broadcast is received by the hotkey thread's message window. If `RegisterHotKey` fails (W4), does that window and thread still exist, so sleep handling still works?
-- **A-3 CC7 rounding:** `round(volume*127/100)` in Python uses round-half-to-even (50 → 64, but in general .5 cases go to even). The spec should say whether that's intended or whether half-up is meant.
-- **A-4 Types:** is a float (`55.5`) or a bool (`true`, which is a subclass of int in Python) a "wrong type" (→ default + W3) or a number to clamp/round?
-- **A-5 CC7 rate:** "on every change" while dragging could send dozens of CC7s per second. Should they go through the engine command queue and be coalesced per tick?
-- **A-6 W/E codes:** W1, W3–W6 and E4 are defined in `docs/ux.md`, not in ARCHITECTURE. The tests assume the copy there. If the UX doc changes, these cases need updating.
-- **A-7 Soak baseline:** it's unclear whether "constant thread count" includes the transient threads from pystray balloons or the debounce timer.
-- **A-8 VirusTotal for the zip:** "the zip follows the same rule". VT scans archive members, so does a Defender hit on an inner file count?
+**A-6 (§11):** user-facing W/E codes and copy are owned by `docs/ux.md`. ARCHITECTURE only defines when they trigger. Test cases reference codes by ID (W1, W3, W4, W7, E2, E4, …). Copy changes go through a ux.md PR that updates the tests in the same PR.
+
+B-1 – B-4 were answered in **§11** (commit 35c01d7) and docs/ux.md §1: B-1 → TH-02/02a/02b; B-2 → WS-04/04a/04b/04c; B-3 → WS-05/05a/05b/05c; B-4 → WS-01 (minimum 340 × 360, grows to fit; code `HEIGHT` must move from 330 to 360).
+
+Still open:
+- **B-5 Instrument audition:** there's no CLI flag or preset to play one GM program directly. A `--play-instrument N` (or similar) flag would make the RC listen check one click.
+C-1 and C-2 were answered in §11 (25fff82) and ux §1: C-1 → WS-05b, WS-06–WS-06d; C-2 → SR-01–SR-07.
+
+## 11. Taskbar zone / cell granularity (CG-G1)
+
+Spec: `docs/design/cell-granularity.md` (merged with #23), sections §4.1 keys, §4.2 geometry, §4.2a UI Automation slot source, §4.3 mapping. Notation: §CG-4.2a = that design doc's section. UIA class names come from [`taskbar-uia-notes.md`](taskbar-uia-notes.md) (CG-G2). Christopher's Windhawk setup isn't confirmed yet (TB-P1).
+
+Common setup: `taskbar_mode: true`, `--dry-run --log-level debug` (logs the slot source and rects), loopMIDI → MIDI-OX to see notes and program changes.
+
+### Slot source (`taskbar_slot_source`)
+| ID | Case | Steps | Expected | Type |
+|---|---|---|---|---|
+| TB-01 | Validation | `auto`, `uia`, `fixed`, `"UIA"`, `"x"`, `1`, missing | Valid values kept. Default `auto`. Invalid → `auto` + W3 (§CG-4.1). Case handling unspecified, see D-1 | A |
+| TB-02 | `auto`, stock taskbar | Stock Win11, left alignment, 10 pinned icons, 100 % | One cell per visible app button **and** per tray item (one per `Taskbar.TaskListButtonAutomationPeer`, plus Start/Search/Task View, plus each `SystemTray.*` button). Log says source = uia (§CG-4.2a) | M + A (snapshot) |
+| TB-03 | `uia` only, success | Same as TB-02 with `uia` | Same cells as TB-02 | M |
+| TB-04 | `fixed` | Set `fixed` | Slot width = `round(taskbar_slot_dip × dpi/96)` from the bar's left edge + offset. Tray from `TrayNotifyWnd` with `taskbar_tray_slot_dip`. Reader never called (fake asserts no call) (§CG-4.2a) | A + M |
+| TB-05 | Snapshot → cells | Recorded rect lists: stock, ~20 custom-size icons + 8 tray + clock, mixed widths, gaps, empty | One cell per rect. App notes ascend from `taskbar_low_note`, tray notes descend from `taskbar_high_note`. Gaps silent. 2 px hysteresis at each rect edge (§CG-4.2a, 4.3) | A |
+| TB-06 | Non-matching or off-bar elements | Snapshot with zero-size rects, `IsOffscreen` items, rects outside the taskbar rect, overflow-flyout items | Ignored. Only visible rects inside the bar become slots (§CG-4.2a) | A |
+
+### UIA failure and fallback
+| ID | Case | Steps | Expected | Type |
+|---|---|---|---|---|
+| TB-10 | COM error | Fake reader raises | `auto`: previous snapshot kept; after 2 failures in a row → fixed slots for that taskbar. `uia`: zone inactive for that taskbar, desktop mapping applies. No user message, logged at info (§CG-4.2a) | A |
+| TB-11 | Empty result | Fake reader returns 0 matches | Same as TB-10 (zero matches counts as failure) | A |
+| TB-12 | Timeout | Fake reader blocks > 1 s | Scan abandoned at 1 s. Engine never blocked (runs on the `taskbar-scan` thread). Previous snapshot used | A |
+| TB-13 | Slow scans → backoff | Fake reader takes 200 ms | Interval doubles up to 30 s. Recovers after 3 fast scans (< 150 ms) | A |
+| TB-14 | Stale rects after Explorer restart | Fake: after `TaskbarCreated`, old element refs return `UIA_E_ELEMENTNOTAVAILABLE` or the old rects | A rescan is triggered (debounced 250 ms) using a fresh `ElementFromHandle` on the **new** HWNDs. Stale rects never kept for more than one rescan. See D-2 | A |
+| TB-15 | Explorer restart, real | Playing on the taskbar: Task Manager → Windows Explorer → Restart | No crash, no stuck note. Zone inactive (desktop mapping) while Explorer is down. Back within ~1 s of the taskbar reappearing (`TaskbarCreated`), with the same notes per icon (§CG-4.2, 4.2a) | M |
+| TB-16 | Explorer replacement | If available: ExplorerPatcher Win10 taskbar or StartAllBack | `auto` → fixed slots (no XAML peers). No error. `uia` → zone inactive | M (optional) |
+| TB-17 | Kill Explorer mid-play | `taskkill /f /im explorer.exe`, wait 5 s, `start explorer` | As TB-15. Nothing logged above info | M |
+| TB-18 | Cost | `--log-level debug`, 2 min playing in taskbar mode | Scan < 30 ms typical. CPU < 2 % overall (LT-06). Scans only while playing (none while stopped or with the mode off) | M + A |
+
+### Icon size: custom and Windhawk
+| ID | Case | Steps | Expected | Type |
+|---|---|---|---|---|
+| TB-20 | Windhawk icon size | Windhawk "Taskbar height and icon size" mod: button width 44 → 32 and 60, icon 24 → 16 and 32 | `auto`: exactly one cell per visible icon at every size. `fixed` at the default 48 shows the misalignment (that's why UIA is the default) | M |
+| TB-21 | Windhawk tray spacing | "Taskbar tray icon spacing and grid" mod: tray width 32 → 24 and 18. Also 2 rows | One cell per tray icon in 1 row. 2-row grid: record behaviour, see D-3 | M |
+| TB-22 | Christopher's setup | **Pending (TB-P1)**: his Windhawk mods with ~20 left-aligned icons and ~8 tray icons plus the clock | Every icon and tray icon gets its own cell (`--self-test` slot dump). Recorded once the setup is confirmed | M (pending) |
+| TB-23 | Small taskbar buttons | Registry/small-button variant where available (24H2 removed `TaskbarSi`; use the Windhawk mod) | Same as TB-20 | M |
+
+### Monitors, scaling and placement
+| ID | Case | Steps | Expected | Type |
+|---|---|---|---|---|
+| TB-30 | 2 monitors, 100 % + 150 % | Taskbars on both ("Show my taskbar on all displays"), left alignment | Each taskbar anchored to its own left edge with its own DPI. Slot k has the same pitch on both bars and a different program (primary `taskbar_program`, secondary the next in `taskbar_secondary_programs`). Same icon → same note after restart (§CG-4.2, 4.2a, 4.3) | M + A |
+| TB-31 | 3+ monitors | 3 (or 4) monitors, taskbar on all. If unavailable: A test with 4 fake taskbars | Every taskbar is a zone. Order = primary first, then secondaries by monitor `(left, top)`. Each secondary gets the next program. Status `Taskbar n/k` (§CG-4.2a) | A + M |
+| TB-32 | Secondary left of primary | Secondary at negative X | Zone works with negative coordinates. Order still by `(left, top)` | A + M |
+| TB-33 | "All displays" toggled at runtime | Turn off, then on, while playing | Off → only the primary zone. On → secondary zones within one refresh (`WM_SETTINGCHANGE`/2 s) | M |
+| TB-34 | Taskbar moved to another monitor | Change the main display so the primary taskbar moves | Zones rebuilt. No crash. `taskbar_monitors` (`primary`/`all`) honoured | M |
+| TB-35 | Mixed DPI rects | UIA rects on a 150 % secondary | Rects are physical px (UIA BoundingRectangle is physical screen coordinates for a per-monitor-aware client) and line up with the cursor. A dot-check: hover each icon edge, cell changes within 2 px | M + A-win |
+
+### Alignment, auto-hide, tray
+| ID | Case | Steps | Expected | Type |
+|---|---|---|---|---|
+| TB-40 | Centered icons | Alignment: Center. Open and close apps | Deterministic: notes follow rect positions and slots move as icons move. No errors. Notes for a given app may change, which is documented (§CG-1, 4.3) | M |
+| TB-41 | Auto-hide | Turn on "Automatically hide the taskbar" | Hidden: cursor at the screen edge maps the slot under it (or the desktop) without errors. Shown: same cells as visible. No rescan storm (check scan count in the log) | M |
+| TB-42 | Tray anchoring | Hover each tray icon, the clock and the chevron, right → left | Distinct notes descending from `taskbar_high_note`, with slot 1 = the right-most item (§CG-4.3 3a) | M + A |
+| TB-43 | Tray stability | Open and close apps | Tray notes don't change | M + A |
+| TB-44 | Add/remove a tray icon | Start or quit an app with a tray icon | Only slots **left** of it shift. The clock and the right-most icons keep their notes | M + A |
+| TB-45 | Overflow flyout | Open "Show hidden icons" | Flyout icons (separate overflow window) are **not** slots. The chevron itself is one slot | M |
+| TB-46 | Secondary tray | Hover the clock on a secondary taskbar | Clock is a tray slot if found (`SystemTray.OmniButton*`). Otherwise the bar has no tray part, with no error | M |
+| TB-47 | Mode off | `taskbar_mode: false` | Mapping identical to desktop mapping (property test). No UIA load, no scan thread | A |
+
+### Pending
+- **TB-P1:** confirm Christopher's Windhawk mods and versions, and record the UIA dump (Accessibility Insights) of his taskbar with them on (CG-G2 AC). Not done; he hasn't been contacted.
+- **D-1** `taskbar_slot_source` case handling: theme is case-insensitive (B-1). Same rule here?
+- **D-2** Explorer restart: the design says "deactivates until the next refresh" plus a `TaskbarCreated` rescan. Should a scan that hits `UIA_E_ELEMENTNOTAVAILABLE` force a fresh `ElementFromHandle` right away, without counting as one of the "2 failures"?
+- **D-3** Multi-row tray (Windhawk grid): the slot rule is one-dimensional (right → left). How should 2-row tray rects be ordered?

@@ -39,3 +39,11 @@ UI order follows this table (friendliest first), not the order in ARCHITECTURE.m
 ## Not yet verified
 These choices are based on how GM/GS patches are known to behave. **No one has listen-tested them on real hardware yet.**
 A listen pass on Windows (Grace, G4) should confirm them, especially Banjo (105) and New Age Pad (88).
+
+## Taskbar zone instruments (CG-P2, design #23)
+
+Proxy analysis in [`listen-check.md`](listen-check.md) (rendered with GeneralUser GS and FluidR3 and measured; **not
+yet listened to on the GS synth**). Recommendation: `taskbar_program` **13 Xylophone** (default 12 Marimba duplicates
+Classic's row 4) and `taskbar_secondary_program` **8 Celesta** (clean, ~4× longer ring than Xylophone, so the two
+monitors are distinct). Classic's 105 Banjo is the only harsh row (21–37 % energy in 2–5 kHz+ vs ≤ 3 % for the
+others) and is the likely source of the "harsh" feedback. Consider replacing it.
