@@ -38,6 +38,18 @@ SPEC_DEFAULTS = {
     "tray_hint_shown": False,
     "window_x": None,
     "window_y": None,
+    # taskbar notes, docs/design/cell-granularity.md §4.1 (CG-S1)
+    "taskbar_mode": False,
+    "taskbar_slot_dip": 44,
+    "taskbar_offset_dip": 0,
+    "taskbar_low_note": 48,
+    "taskbar_high_note": 96,
+    "taskbar_program": 13,
+    "taskbar_monitors": "all",
+    "taskbar_slot_source": "auto",
+    "taskbar_secondary_programs": [8, 108, 9],
+    "taskbar_tray": True,
+    "taskbar_tray_slot_dip": 32,
 }
 
 
