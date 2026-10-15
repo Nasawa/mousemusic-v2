@@ -32,8 +32,9 @@ Design principles:
 - Screen readers (C-2): the status line's accessible name/description is always the **full** message, even when the
   visible text is truncated with `…`. A changed message is announced **once** (no repeats on re-wrap or resize). Its
   position in the tab order is after Reconnect (keyboard users can reach and re-read it).
-- Theme setting (B-1): `theme` is read case-insensitively (stripped and lowercased, so `" Dark "` → `dark`). Any
+- Theme setting (B-1, see §11): `theme` is read case-insensitively (stripped and lowercased, so `" Dark "` → `dark`). Any
   other value → `system` + W3.
+- Rows (Q-D1, §12): the Taskbar notes checkbox shares row 7 with Hold notes (no extra row), and the Theme row (8d) is already counted in the 360 minimum (ARCHITECTURE §11 Q-D1).
 - Position: saved in `window_x`/`window_y` (logical px, `null` = centre on primary). On load, if the saved point isn't on any monitor's work area, centre the window and don't overwrite the saved values until the user moves it (§11 UX-Q1).
 - Icon: `assets/icon.ico` (P2).
 - Layout: ttk `grid`, two columns (label right-aligned, control left-aligned), 8 px padding, 4 px row gap.
@@ -41,7 +42,7 @@ Design principles:
 ### 1.1 Wireframe
 
 ```
-┌ MouseMusic ───────────────────────────── _ □ ✕ ┐
+┌ MouseMusic  (min 340 × 360, grows to fit) ─ _ ✕ ┐
 │                                                 │
 │  [ ▶  Start ]                Ctrl+Alt+M         │   row 0  Start/Stop button + hotkey hint
 │ ─────────────────────────────────────────────── │
@@ -54,13 +55,14 @@ Design principles:
 │     [ ] Hold notes (legato)  [ ] Taskbar notes  │   row 7  two checkboxes (§12)
 │  MIDI output  [ Microsoft GS Wavetable ▾ ] [⟳]  │   row 8  device + Reconnect
 │     Shortcut  [ Ctrl+Alt+M         ▾ ]          │   row 8c global shortcut
+│        Theme  [ System (Dark)      ▾ ]          │   row 8d theme (§11)
 │ ─────────────────────────────────────────────── │
 │  ● Stopped — press Start or Ctrl+Alt+M          │   row 9  status line (wraps)
 └─────────────────────────────────────────────────┘
 ```
 
 Tab order is top to bottom, left to right: Start → Scale → Key → Low → High → Instruments → Volume → Note length →
-Hold notes → Taskbar notes → MIDI output → Reconnect → Shortcut. Start has focus when the window opens.
+Hold notes → Taskbar notes → MIDI output → Reconnect → Shortcut → Theme. Start has focus when the window opens.
 
 ### 1.2 Controls
 
@@ -78,6 +80,7 @@ Hold notes → Taskbar notes → MIDI output → Reconnect → Shortcut. Start h
 | 8 | `MIDI output` | readonly Combobox, ellipsized at ~24 chars, full name in tooltip | WinMM device names | `Microsoft GS Wavetable Synth` | `midi_device` | **Re-enumerates every time the dropdown opens** (§9). Choosing a device while playing silences, closes and reopens (engine `set_device`). If the list is empty the combobox shows `No MIDI output found` and is disabled |
 | 8b | `⟳` (tooltip `Reconnect`) | small ttk.Button | — | — | — | Closes and reopens the selected device. Use it after unplugging headphones etc. Status: `Reconnecting…` then the normal status |
 | 8c | `Shortcut` | readonly Combobox | `Ctrl+Alt+M`, `Ctrl+Alt+Shift+M`, `Ctrl+Alt+P`, `Ctrl+Alt+F9`, `Off` (a custom value from the file is listed first) | `Ctrl+Alt+M` | `hotkey` | Re-registers live on change. If the chosen key is taken, `Ctrl+Alt+Shift+M` is tried as a fallback (W7); if both fail, W4 |
+| 8d | `Theme` | readonly Combobox | `System (Light)` / `System (Dark)`, `Light`, `Dark` | `System (…)` | `theme` | Applies live. See §11 Dark mode |
 | 9 | status line | ttk.Label, **wraps** to the window width | see §1.3 | — | — | Coloured dot + text. Long messages wrap onto more lines and the window grows taller to fit (shrinking back afterwards). Truncated with `…` only when the window has reached the work-area height (§1, B-2); the full text is then in the tooltip. Errors stay until resolved. They are never auto-dismissed |
 
 All settings save automatically (debounced 500 ms, per §4). There is **no Save, Apply, or OK button.**
@@ -294,6 +297,226 @@ All of these were resolved by Archimedes in `ARCHITECTURE.md` §11. That section
 | Q6 | Pitch-range granularity | ✅ Octave Cs (C0–C8) only. Semitones JSON-only, shown as an extra item (§1.2) |
 | Q7 | Help link target | ✅ `https://github.com/Nasawa/mousemusic-v2#<anchor>`, anchors defined in `ui/strings.py`. P4 keeps them (§4) |
 | Q8 | Mid-play device-loss detection | ✅ Any non-zero `midiOutShortMsg` → silence, close, stop (E4). No polling or auto-reconnect. Silent endpoint changes → manual ⟳ (W6) |
+
+---
+
+## 11. Dark mode (issue #21)
+
+Targeted for rc3/rc4. Goal: the window looks native next to other Windows 11 apps in both themes, follows the
+Windows app theme by default, and can be overridden. Nothing here changes audio or the engine.
+
+### 11.1 Control and setting
+
+| Item | Spec |
+|---|---|
+| Label | `Theme` (row 8d, below `Shortcut`, above the status separator, see §1.1). Last in tab order |
+| Widget | readonly ttk.Combobox, width 18 |
+| Values (exact) | `System (Light)` or `System (Dark)` (first item; the suffix shows what Windows is set to right now), `Light`, `Dark` |
+| Settings key | `theme`: `"system"` \| `"light"` \| `"dark"`. Default **`"system"`**. Unknown value → `"system"` with W3 (same as other enums, §11 OQ-8) |
+| Behaviour | Applies live on selection, no restart. Saved with the normal 500 ms debounce |
+| Height | Minimum 340 × 360, grows to fit (ARCHITECTURE §11 Q-D1) |
+
+Resolving the effective theme (pure function, testable without Windows):
+1. If Windows **high contrast** is on → `high_contrast` (§11.6). The `theme` setting is ignored but kept.
+2. Else if `theme` is `light` or `dark` → that.
+3. Else (`system`) read `HKCU\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize`, DWORD
+   `AppsUseLightTheme`: `0` → dark, `1` → light. Missing key or value, or read error → **light** (and log at debug).
+   Note: use `AppsUseLightTheme`, not `SystemUsesLightTheme` (that one is for the taskbar).
+
+### 11.2 Following live Windows changes
+
+- **Primary: `WM_SETTINGCHANGE`.** Windows broadcasts it to top-level windows when the app theme changes, with
+  `lParam` = the string `"ImmersiveColorSet"`. High-contrast toggles arrive as `WM_SETTINGCHANGE` with
+  `wParam == SPI_SETHIGHCONTRAST` (0x0043). The existing hidden message window on the hotkey thread (§6, which
+  already receives power and session broadcasts) handles both and posts `("theme_changed", None)` to `ui_queue`.
+  The Tk thread re-resolves and re-applies the theme. No new thread.
+- **Backup:** re-resolve when the main window gains focus (`<FocusIn>` on root), in case the broadcast was missed
+  (defensive only: the message window is a top-level window, so it does receive broadcasts). Cheap: one registry read.
+- **No polling timer.**
+- Debounce: one Windows theme switch sends several broadcasts. Coalesce re-applies to at most one per 250 ms.
+- When `theme` is `light` or `dark`, Windows changes don't affect the window, but `System (…)` still updates its suffix.
+
+### 11.3 Title bar
+
+- After the Tk root exists and **before it is first shown** (it starts withdrawn; see `app._run_app`), get the
+  frame window handle with `GetParent(root.winfo_id())`, then call
+  `DwmSetWindowAttribute(hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE, &BOOL(dark), sizeof(BOOL))`:
+  1. attribute **20** (Windows 10 20H1+ and Windows 11);
+  2. if that returns a failure HRESULT, retry with **19** (older Windows 10 builds 17763–18985);
+  3. if both fail or `dwmapi` isn't present → do nothing (light title bar, log at debug). It never raises.
+- Live change: set the attribute again, then force a non-client repaint, so Windows 10 updates without a restart:
+  `SetWindowPos(hwnd, 0, 0, 0, 0, 0, SWP_NOMOVE|SWP_NOSIZE|SWP_NOZORDER|SWP_FRAMECHANGED)`.
+- High contrast: always pass `FALSE` (the system draws the title bar in high-contrast colours).
+- Tooltips are `overrideredirect` windows with no title bar. They only need palette colours.
+- Optional, not required: on Windows 11 22H2+ the caption colour could match `bg` via `DWMWA_CAPTION_COLOR` (35). Leave
+  it out of v0.x.
+
+### 11.4 Palette tokens
+
+Theme engine: **ttk `clam`** for both Light and Dark. It's the stdlib theme that honours every colour option. `vista`
+ignores most of them. Fonts and spacing are unchanged (Segoe UI 9 via `TkDefaultFont`). The light palette
+deliberately looks close to Windows 11 light, so switching from `vista` to `clam` doesn't feel like a different app.
+
+| Token | Light | Dark | Used for |
+|---|---|---|---|
+| `bg` | `#F3F3F3` | `#202020` | Root window, frames, labels, separator gaps, checkbutton background |
+| `surface` | `#FFFFFF` | `#2D2D2D` | Combobox field, button face, popdown list, tooltip background |
+| `surface_hover` | `#F0F0F0` | `#383838` | Button and combobox `active` state |
+| `text` | `#1B1B1B` | `#F3F3F3` | All labels, field text, status text, button text |
+| `text_secondary` | `#5C5C5C` | `#B8B8B8` | Hotkey hint next to Start, value labels (`80 %`, `250 ms`) |
+| `border` | `#8A8A8A` | `#8A8A8A` | Field and button borders, separators, checkbox outline |
+| `accent` | `#4F46E5` | `#5B54E8` | Start button face (default button), checkbox check fill |
+| `on_accent` | `#FFFFFF` | `#FFFFFF` | Text and glyphs on `accent` |
+| `focus` | `#4F46E5` | `#A5A0FF` | Focus ring (`focuscolor`), focused field border |
+| `disabled_text` | `#9E9E9E` | `#6E6E6E` | Text of disabled widgets (Key on Chromatic, Note length with legato, empty MIDI output) |
+| `disabled_surface` | `#F7F7F7` | `#262626` | Field background when disabled |
+| `track` | `#8A8A8A` | `#8A8A8A` | Slider trough |
+| `thumb` | `#4F46E5` | `#A5A0FF` | Slider handle |
+| `select_bg` / `select_fg` | `#4F46E5` / `#FFFFFF` | `#4F46E5` / `#FFFFFF` | Selected row in the popdown list, selected text in combobox field |
+| `link` | `#4338CA` | `#A5A0FF` | `Help` link in the status line (replaces the hard-coded `#2563EB`) |
+| `dot_idle` | `#6B6B6B` | `#A3A3A3` | Status dot: Stopped, Connecting (replaces `GREY`) |
+| `dot_ok` | `#15803D` | `#4ADE80` | Status dot: Playing (replaces `GREEN`) |
+| `warn` | `#A14A06` | `#FBBF24` | Status ▲ warning glyph (replaces `AMBER`) |
+| `error` | `#B91C1C` | `#F87171` | Status ■ error glyph (replaces `RED`) |
+
+The status *text* always uses `text`. Only the glyph is coloured, and the glyph shape (●/▲/■) already carries the
+meaning (§1.3). `status.py` returns a semantic colour role (`idle`/`ok`/`warn`/`error`) instead of a hex value. The
+window maps the role to the active palette.
+
+### 11.5 Widget mapping
+
+All via `ttk.Style` on `clam`, with `style.configure` plus `style.map` for states. Re-run the whole function on every theme change.
+
+| Widget / style | Options |
+|---|---|
+| root `tk.Tk`, tooltip `tk.Toplevel` | `configure(bg=bg)` (tk, not ttk, so it must be set directly) |
+| `.` (defaults) | `background=bg, foreground=text, bordercolor=border, focuscolor=focus, troughcolor=track, selectbackground=select_bg, selectforeground=select_fg, insertcolor=text`; map `foreground` `disabled → disabled_text` |
+| `TFrame`, `TLabel` | `background=bg, foreground=text` |
+| `Hint.TLabel` (new; replaces `foreground="grey"`) | `foreground=text_secondary` |
+| `Value.TLabel` (volume and note length values) | `foreground=text_secondary` |
+| `Link.TLabel` (Help) | `foreground=link`, underlined font as now |
+| `Status.TLabel` / `Dot.TLabel` | text `text`. Dot foreground is set per state from `dot_idle`/`dot_ok`/`warn`/`error` |
+| `Tooltip.TLabel` | `background=surface, foreground=text, bordercolor=border`, relief solid 1 |
+| `TButton` (⟳) | `background=surface, foreground=text, bordercolor=border, lightcolor=surface, darkcolor=surface`; map `active → surface_hover`, `pressed → border`, `disabled → disabled_surface/disabled_text`, `focus → bordercolor focus` |
+| `Accent.TButton` (Start/Stop) | `background=accent, foreground=on_accent`; map `active` → `accent` with hover lighten 8 %, `focus` → `bordercolor focus` |
+| `TCombobox` | `fieldbackground=surface, background=surface, foreground=text, arrowcolor=text, bordercolor=border, lightcolor=surface, darkcolor=surface`; map `readonly` `fieldbackground → surface` (clam greys readonly fields otherwise), `focus → bordercolor focus`, `disabled → fieldbackground disabled_surface, foreground disabled_text, arrowcolor disabled_text`, `selectbackground/selectforeground` in readonly focus → `surface`/`text` (so a readonly field doesn't show a blue selection highlight) |
+| Combobox **popdown list** (a classic `tk.Listbox`, not themed by ttk) | Before creating any combobox: `root.option_add("*TCombobox*Listbox.background", surface)`, and likewise `foreground=text`, `selectBackground=select_bg`, `selectForeground=select_fg`, `font=TkDefaultFont`, `borderWidth=0`. The popdown's scrollbar uses `*TCombobox*Listbox` siblings. Style `Vertical.TScrollbar` with `background=surface, troughcolor=bg, arrowcolor=text`. **Live change:** `option_add` only affects new widgets, so for each existing combobox: `pd = root.tk.call("ttk::combobox::PopdownWindow", combo)` then `root.tk.call(f"{pd}.f.l", "configure", "-background", surface, ...)` |
+| `TCheckbutton` (Hold notes) | `background=bg, foreground=text, indicatorbackground=surface, indicatorforeground=on_accent, upperbordercolor=border, lowerbordercolor=border`; map `selected → indicatorbackground accent`, `active → background bg`, `disabled → foreground disabled_text` |
+| `Horizontal.TScale` | `troughcolor=track, background=thumb, bordercolor=thumb, lightcolor=thumb, darkcolor=thumb`; map `active → background focus`, `disabled → background disabled_text`. Clam draws the trough with `bordercolor`, so set it to `track` on the trough element via `Horizontal.Scale.trough` `troughcolor` and keep the slider at `thumb` |
+| `TSeparator` | `background=border` |
+
+### 11.6 High contrast
+
+- Detect with `SystemParametersInfoW(SPI_GETHIGHCONTRAST)` and the `HCF_HIGHCONTRASTON` flag, at startup and on `WM_SETTINGCHANGE`.
+- When it's on, **don't apply any palette.** Use the `vista` theme (on Windows, `winnative` if `vista` is missing), no
+  `option_add` colours, and Tk's system colour names (`SystemButtonFace`, `SystemWindowText`, `SystemHighlight`), so
+  the user's high-contrast colours win. Status glyphs use `SystemWindowText` (the shape carries the state). Dark title
+  bar attribute is `FALSE`.
+- The `Theme` combobox stays enabled and its setting is saved, but it has no visible effect. Its tooltip reads
+  `Windows high contrast is on, so MouseMusic uses your contrast colours.`
+- Turning high contrast off re-applies the saved theme live.
+
+### 11.7 Tray icon, menu and notifications
+
+- **Icon:** the existing indigo tile (`#4F46E5`) with a white glyph is a solid shape, so it reads on both taskbar
+  colours. Measured contrast of the tile edge: 5.67:1 vs the light taskbar `#F3F3F3`, and 2.59:1 vs the dark taskbar
+  `#202020`. Below 3:1 on dark, but the white glyph inside is 6.29:1 against the tile, and the glyph is what the eye
+  reads (the same approach as many coloured-tile tray icons). **No separate dark-taskbar icon set is required.** The
+  idle/playing/error badges keep their white ring, which separates them from any taskbar colour. Taskbar colour comes
+  from `SystemUsesLightTheme`, not from the app theme, so the tray icon must **not** follow the `theme` setting.
+- **Menu:** pystray uses a native Win32 popup menu. Windows draws it in the classic light style unless the process
+  opts in through undocumented `uxtheme` ordinals (`SetPreferredAppMode`, #135). **v0.x: leave the tray menu native/light.**
+  That's consistent with many Win32 apps (see Q-D3). Labels are unchanged.
+- **Notifications:** balloons and toasts are drawn by Windows and follow the system theme automatically. No work needed.
+- **High contrast:** Windows renders the menu and notifications in high-contrast colours. The icon is unchanged.
+
+### 11.8 New wording
+
+| Where | Text |
+|---|---|
+| Label | `Theme` |
+| Values | `System (Light)`, `System (Dark)`, `Light`, `Dark` |
+| Combobox tooltip (normal) | `System follows your Windows app theme.` |
+| Combobox tooltip (high contrast) | `Windows high contrast is on, so MouseMusic uses your contrast colours.` |
+| W3 (existing) | Reused for an invalid `theme` value. No new message |
+
+### 11.9 Contrast results
+
+Computed with `tools/contrast.py` (WCAG 2.x relative luminance; the script exits non-zero on any failure, and CI can
+run it). Thresholds: text ≥ 4.5:1, UI components and focus indicators ≥ 3:1. Disabled controls are exempt (WCAG
+1.4.3), but are still kept distinguishable.
+
+| Theme | Foreground | Background | Ratio | Min | Result |
+|---|---|---|---|---|---|
+| light | `text` #1B1B1B | `bg` #F3F3F3 | 15.52:1 | 4.5 | pass |
+| light | `text` #1B1B1B | `surface` #FFFFFF | 17.22:1 | 4.5 | pass |
+| light | `text_secondary` #5C5C5C | `bg` #F3F3F3 | 6.03:1 | 4.5 | pass |
+| light | `text_secondary` #5C5C5C | `surface` #FFFFFF | 6.69:1 | 4.5 | pass |
+| light | `on_accent` #FFFFFF | `accent` #4F46E5 | 6.29:1 | 4.5 | pass |
+| light | `select_fg` #FFFFFF | `select_bg` #4F46E5 | 6.29:1 | 4.5 | pass |
+| light | `link` #4338CA | `bg` #F3F3F3 | 7.12:1 | 4.5 | pass |
+| light | `warn` #A14A06 | `bg` #F3F3F3 | 5.41:1 | 4.5 | pass |
+| light | `error` #B91C1C | `bg` #F3F3F3 | 5.83:1 | 4.5 | pass |
+| light | `border` #8A8A8A | `surface` #FFFFFF | 3.45:1 | 3.0 | pass |
+| light | `border` #8A8A8A | `bg` #F3F3F3 | 3.11:1 | 3.0 | pass |
+| light | `focus` #4F46E5 | `bg` #F3F3F3 | 5.67:1 | 3.0 | pass |
+| light | `focus` #4F46E5 | `surface` #FFFFFF | 6.29:1 | 3.0 | pass |
+| light | `track` #8A8A8A | `bg` #F3F3F3 | 3.11:1 | 3.0 | pass |
+| light | `thumb` #4F46E5 | `bg` #F3F3F3 | 5.67:1 | 3.0 | pass |
+| light | `accent` #4F46E5 | `bg` #F3F3F3 | 5.67:1 | 3.0 | pass |
+| light | `dot_idle` #6B6B6B | `bg` #F3F3F3 | 4.80:1 | 3.0 | pass |
+| light | `dot_ok` #15803D | `bg` #F3F3F3 | 4.52:1 | 3.0 | pass |
+| light | `disabled_text` #9E9E9E | `bg` #F3F3F3 | 2.41:1 | — | exempt (disabled) |
+| dark | `text` #F3F3F3 | `bg` #202020 | 14.68:1 | 4.5 | pass |
+| dark | `text` #F3F3F3 | `surface` #2D2D2D | 12.41:1 | 4.5 | pass |
+| dark | `text_secondary` #B8B8B8 | `bg` #202020 | 8.21:1 | 4.5 | pass |
+| dark | `text_secondary` #B8B8B8 | `surface` #2D2D2D | 6.94:1 | 4.5 | pass |
+| dark | `on_accent` #FFFFFF | `accent` #5B54E8 | 5.41:1 | 4.5 | pass |
+| dark | `select_fg` #FFFFFF | `select_bg` #4F46E5 | 6.29:1 | 4.5 | pass |
+| dark | `link` #A5A0FF | `bg` #202020 | 7.04:1 | 4.5 | pass |
+| dark | `warn` #FBBF24 | `bg` #202020 | 9.76:1 | 4.5 | pass |
+| dark | `error` #F87171 | `bg` #202020 | 5.89:1 | 4.5 | pass |
+| dark | `border` #8A8A8A | `surface` #2D2D2D | 3.99:1 | 3.0 | pass |
+| dark | `border` #8A8A8A | `bg` #202020 | 4.72:1 | 3.0 | pass |
+| dark | `focus` #A5A0FF | `bg` #202020 | 7.04:1 | 3.0 | pass |
+| dark | `focus` #A5A0FF | `surface` #2D2D2D | 5.95:1 | 3.0 | pass |
+| dark | `track` #8A8A8A | `bg` #202020 | 4.72:1 | 3.0 | pass |
+| dark | `thumb` #A5A0FF | `bg` #202020 | 7.04:1 | 3.0 | pass |
+| dark | `accent` #5B54E8 | `bg` #202020 | 3.01:1 | 3.0 | pass |
+| dark | `dot_idle` #A3A3A3 | `bg` #202020 | 6.46:1 | 3.0 | pass |
+| dark | `dot_ok` #4ADE80 | `bg` #202020 | 9.35:1 | 3.0 | pass |
+| dark | `disabled_text` #6E6E6E | `bg` #202020 | 3.20:1 | — | exempt (disabled) |
+
+
+Notes: dark `accent` vs `bg` is 3.01:1, right at the limit, so don't darken it. Light `border` vs `bg` is 3.11:1, so
+borders sit on `surface` fields (3.45:1) where it matters.
+
+### 11.10 Build checklist (Sprite)
+
+- [ ] `config.py`: add `theme: str = "system"` (enum `system|light|dark`, invalid → default + W3). Round-trip test.
+- [ ] `ui/theme.py` (new, pure, no Tk import at module level): `PALETTES`, `resolve(theme, apps_use_light, high_contrast) -> "light"|"dark"|"high_contrast"`, tests for every combination.
+- [ ] `platform/win_theme.py`: `apps_use_light_theme() -> bool | None` (winreg), `high_contrast_on() -> bool`, `set_dark_title_bar(hwnd, dark) -> bool` (attr 20 then 19, then `SWP_FRAMECHANGED`). All failures return a value, never raise.
+- [ ] Message window: handle `WM_SETTINGCHANGE` (`"ImmersiveColorSet"` or `SPI_SETHIGHCONTRAST`) → post `theme_changed`. Coalesce to 250 ms on the Tk side. Re-resolve on root `<FocusIn>`.
+- [ ] `window.py`: `apply_theme(palette)` configures every style in §11.5 and the root `bg`, re-skins existing combobox popdowns, and updates tooltips. Call it **before** the first `deiconify()` (no light flash) and on each change.
+- [ ] Remove hard-coded colours: `foreground="grey"` (hint) → `Hint.TLabel`; `#2563EB` (Help) → `Link.TLabel`; `status.py` `GREY/GREEN/AMBER/RED` → roles mapped to palette tokens.
+- [ ] Start/Stop uses `Accent.TButton`.
+- [ ] Theme combobox row 8d, values per §11.8 with a live `System (…)` suffix. Tab order last.
+- [ ] High contrast path per §11.6.
+- [ ] Tray: no changes (icon and menu as §11.7).
+- [ ] `tools/contrast.py` passes, and is optionally added to CI.
+- [ ] Manual check on Windows 11: switch Settings → Personalization → Colors → *Choose your mode* while the app is open and stopped and playing. The title bar, window, open popdown and tooltips all flip within ~1 s, with no restart and no audio glitch. Repeat with high contrast (Left Alt+Left Shift+Print Screen). Check at 100 % and 150 % scaling.
+
+### 11.11 Open questions (dark mode) — all resolved
+
+Resolved by Archimedes in ARCHITECTURE.md §11 (5ef93d1). That section is binding.
+
+| # | Question | Resolution |
+|---|---|---|
+| Q-D1 | Window height | ✅ No "More…" area. Minimum **340 × 360**, grows to fit. The P1 ≤ 360×300 budget is superseded |
+| Q-D2 | `theme` in the settings schema | ✅ Added to §4 defaults (`"system"`), validated like other enums (unknown or wrong type → `system` + W3). No `schema` bump |
+| Q-D3 | Dark tray menu | ✅ Stays light (system default) in v0.x. No undocumented `uxtheme` ordinals |
+| Q-D4 | Theme engine | ✅ Stdlib `clam` with our palette tokens. No `sv-ttk` |
+| Q-D5 | Message window receives broadcasts | ✅ Yes, it's a hidden top-level window (answered from the code) |
 
 ---
 
