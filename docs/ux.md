@@ -26,6 +26,12 @@ Design principles:
 - Staying on screen (B-3): whenever the height changes, the window position is re-clamped into its monitor's work
   area with the same `ui/placement.py` logic used on restore (it grows downward, and moves up only if the bottom
   would leave the work area).
+- Returning after a clamp (C-1): when the status shrinks again, the window goes back to the position it had **before**
+  the temporary clamp move, but only if the user hasn't moved it since. If they have, it stays where they put it. Height
+  always follows the content, with a minimum of 340 × 360 and the work-area cap (B-2).
+- Screen readers (C-2): the status line's accessible name/description is always the **full** message, even when the
+  visible text is truncated with `…`. A changed message is announced **once** (no repeats on re-wrap or resize). Its
+  position in the tab order is after Reconnect (keyboard users can reach and re-read it).
 - Theme setting (B-1): `theme` is read case-insensitively (stripped and lowercased, so `" Dark "` → `dark`). Any
   other value → `system` + W3.
 - Position: saved in `window_x`/`window_y` (logical px, `null` = centre on primary). On load, if the saved point isn't on any monitor's work area, centre the window and don't overwrite the saved values until the user moves it (§11 UX-Q1).

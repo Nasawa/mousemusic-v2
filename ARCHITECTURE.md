@@ -453,6 +453,13 @@ binding. Where one overlaps an earlier section, this section wins.
 | B-3 | Yes, reuse it. `ui/placement.py` exists, is pure and tested, and already clamps against **work areas** (`monitor_work_areas` → `rcWork`). `_clamp` pins the window to the area's top when it's taller than the area, which is consistent with the B-2 cap. Today `Window._fit()` resizes in place without re-clamping, so Sprite must call `place_window((x, y), (w, h_capped), work_areas, primary)` after each height change, with the height already capped per B-2. The window grows downward and moves up only as far as needed, and the moved position isn't saved unless the user moves the window. |
 | B-4 | `docs/ux.md` §1 is now "minimum 340 × 360, grows to fit" (it said 340 × 300 fixed). Main's code still has `HEIGHT = 330` in `ui/window.py`. Sprite changes it to 360 when the Theme row (PR #22) lands, or earlier. |
 
+### Test-plan ambiguities (C-1 – C-2)
+
+| # | Decision |
+|---|---|
+| C-1 | The window keeps a **home position** (the last position the user chose, or the restored or centred one) separate from its **current** position. A B-3 clamp moves only the current position and records `clamped_from = home`. When the status shrinks and the window fits at home again, it moves back to home, **unless the user moved the window since the clamp** (detected via `<Configure>` with a position change not caused by our own `geometry()` call). In that case the new position becomes home and nothing jumps. Clamp moves are never saved to `window_x`/`window_y`; only user moves are. Height always follows content: `clamp(required, min 360 logical, work-area cap)`. |
+| C-2 | The full message is the status line's accessible name **and** description, even when visibly truncated (B-2). It's announced **once** per distinct message, never on re-wrap, resize or theme change. Mechanism: Python 3.12's Tk 8.6 has no accessibility API, so Sprite adds a small Win32 helper: set the status label's child-window text (`SetWindowTextW` on `winfo_id()`, which MSAA/UIA expose as the Name), then `NotifyWinEvent(EVENT_OBJECT_NAMECHANGE, …, OBJID_CLIENT, CHILDID_SELF)` once on change. The status label is also put **in the tab order** (`takefocus=1`, after Reconnect), so the text can always be re-read by keyboard even if a screen reader ignores the event. **Gate:** Grace verifies with Narrator and NVDA. If the event isn't announced, the fallback is to keep the focusable status and additionally show error (E-code) messages as a tray balloon, which Windows screen readers do announce, and log it as a known limitation. |
+
 ### Cell granularity (issue #16)
 
 | # | Decision |
