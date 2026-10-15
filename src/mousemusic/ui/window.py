@@ -199,8 +199,18 @@ class MainWindow:
         )
 
         label(5, strings.LABEL_INSTRUMENTS)
-        self.instruments = ttk.Combobox(f, state="readonly", width=24)
-        self.instruments.grid(row=5, column=1, sticky="w", **pad)
+        inf = ttk.Frame(f)
+        inf.grid(row=5, column=1, sticky="w", **pad)
+        preview = self.ctl.previewer is not None  # same width as the MIDI row when shown
+        self.instruments = ttk.Combobox(inf, state="readonly", width=17 if preview else 24)
+        self.instruments.grid(row=0, column=0)
+        self.preview_btn: ttk.Button | None = None
+        if preview:
+            self.preview_btn = ttk.Button(
+                inf, text=strings.PREVIEW, width=7, command=self.ctl.preview
+            )
+            self.preview_btn.grid(row=0, column=1, padx=(4, 0))
+            Tooltip(self.preview_btn, self.ctl.preview_tooltip)
         self.instruments.bind(
             "<<ComboboxSelected>>",
             lambda e: self._pick(
@@ -549,6 +559,8 @@ class MainWindow:
         self._set_combo(self.low, c.range_options(s.low_note), s.low_note)
         self._set_combo(self.high, c.range_options(s.high_note), s.high_note)
         self._set_combo(self.instruments, c.instrument_options(), s.instrument_set)
+        if self.preview_btn is not None:
+            self.preview_btn.state(["!disabled"] if c.can_preview else ["disabled"])
         if round(float(self.volume.get())) != s.volume:
             self.volume.set(s.volume)
         self.volume_label.configure(text=strings.VOLUME_VALUE.format(value=s.volume))

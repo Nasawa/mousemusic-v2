@@ -49,7 +49,7 @@ Design principles:
 │        Scale  [ Pentatonic major       ▾ ]      │   row 1
 │          Key  [ C  ▾ ]                          │   row 2
 │  Pitch range  [ C2 ▾ ]  to  [ C7 ▾ ]            │   row 3
-│  Instruments  [ Classic (8)            ▾ ]      │   row 4
+│  Instruments  [ Classic (8)     ▾ ] [Preview]   │   row 4  set + Preview (4b)
 │       Volume  [━━━━━━━━━━━━●━━━]  80 %          │   row 5
 │  Note length  [━━━━●━━━━━━━━━━━]  250 ms        │   row 6
 │     [ ] Hold notes (legato)  [ ] Taskbar notes  │   row 7  two checkboxes (§12)
@@ -61,8 +61,8 @@ Design principles:
 └─────────────────────────────────────────────────┘
 ```
 
-Tab order is top to bottom, left to right: Start → Scale → Key → Low → High → Instruments → Volume → Note length →
-Hold notes → Taskbar notes → MIDI output → Reconnect → Shortcut → Theme. Start has focus when the window opens.
+Tab order is top to bottom, left to right: Start → Scale → Key → Low → High → Instruments → Preview → Volume → Note length →
+Hold notes → Taskbar notes → MIDI output → Reconnect → status line (C-2) → Shortcut → Theme. Start has focus when the window opens.
 
 ### 1.2 Controls
 
@@ -73,6 +73,7 @@ Hold notes → Taskbar notes → MIDI output → Reconnect → Shortcut → Them
 | 2 | `Key` | readonly Combobox, narrow | `C`, `C♯`, `D`, `E♭`, `E`, `F`, `F♯`, `G`, `A♭`, `A`, `B♭`, `B` | `C` | `root` | Applies live. Disabled (greyed) when Scale = Chromatic, since key has no effect there |
 | 3 | `Pitch range` | two readonly Comboboxes + the word `to` | octaves `C0`…`C8` (MIDI 12…108), step 12 | `C2` to `C7` (36–96) | `low_note`, `high_note` | If the user picks low ≥ high, the other box moves so the range is at least one octave (no error). Only octave Cs are offered in the UI. A non-C value from the file shows its note name, e.g. `G2`, as an extra item |
 | 4 | `Instruments` | readonly Combobox | `Classic (8)`, `Mellow (6)`, `Percussive (7)`, `Piano only (1)`, `Full GM library (128)` | `Classic (8)` | `instrument_set` | The number is the row count, i.e. how many bands the screen is split into top to bottom. Tooltip on hover: `Top of the screen to bottom: <names>` |
+| 4b | `Preview` | small ttk.Button, same row as 4 | — | — | — | Plays a short C-major scale (C4–C5, 8 notes, ~1.5 s) with the set's **first** instrument on the selected MIDI output, in the background. Tooltip `Play a short scale with <name>, the first instrument in this set`. **Disabled while playing/connecting** (tooltip `Stop first to preview an instrument`), while a preview runs, and with no MIDI output. Start cancels a running preview first. Errors use E1–E5 |
 | 5 | `Volume` | ttk.Scale + value label | 0–100 %, step 1 | 80 % | `volume` | Label `80 %`. Sent as CC7 Channel Volume (`round(volume*127/100)`) on open, on Start and on every change. Live. `velocity` (default 100) is file-only |
 | 6 | `Note length` | ttk.Scale + value label | 50–2000 ms, step 10 | 250 ms | `note_length_ms` | Label `250 ms`. **Disabled** when Hold notes is checked |
 | 7 | `Hold notes (legato)` | ttk.Checkbutton | on/off | off | `legato` | When on, a note holds until the cursor enters the next cell or until Stop |
@@ -228,6 +229,7 @@ When the error clears, show the next pending warning, if any, then the normal st
 ### CLI (support) copy
 - `--list-devices` with zero devices prints `No MIDI output devices found.` and exits 0.
 - Otherwise it prints `0: Microsoft GS Wavetable Synth`, one per line.
+- `--play-instrument <program>` (GM program 0–127) plays the same short scale as Preview on the saved device (or the §9 fallback), prints `Playing GM program 40 (Violin)...` then `Done: played on <device>.`, and exits 0. An invalid program prints `--play-instrument needs a GM program number from 0 to 127 (<detail>).` to stderr and exits 2. A MIDI error prints the E1–E5 status text to stderr and exits 1. Works with `--dry-run` and `--portable`.
 
 ---
 

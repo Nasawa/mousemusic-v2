@@ -116,6 +116,12 @@ NO_DEVICE_COMBO = "No MIDI output found"
 # CLI (--list-devices)
 CLI_NO_DEVICES = "No MIDI output devices found."
 CLI_DEVICE_LINE = "{index}: {name}"
+CLI_PLAYING = "Playing GM program {program} ({name})..."
+CLI_PLAYED = "Done: played on {device}."
+CLI_INVALID_PROGRAM = "--play-instrument needs a GM program number from 0 to 127 ({detail})."
+PREVIEW = "Preview"
+PREVIEW_TOOLTIP = "Play a short scale with {name}, the first instrument in this set"
+PREVIEW_TOOLTIP_PLAYING = "Stop first to preview an instrument"
 
 
 def midi_error_message(exc: Exception, device: str | None = None) -> tuple[str, str | None]:

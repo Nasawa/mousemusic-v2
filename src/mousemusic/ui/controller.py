@@ -69,6 +69,7 @@ class AppController:
         hotkey_registrar: Callable[[str], None] | None = None,
         first_run: bool = False,
         theme_probe: Callable[[], tuple[bool | None, bool]] | None = None,
+        previewer: Any = None,
     ) -> None:
         """``hotkey_active``: the shortcut that actually registered (may be the fallback);
         defaults to the configured one when ``hotkey_ok``. ``hotkey_registrar(setting)``
@@ -85,6 +86,7 @@ class AppController:
         self.w5_shown = False
         self.quitting = False
         self.hotkey_registrar = hotkey_registrar
+        self.previewer = previewer  # preview.Previewer; None hides the Preview button
         # Theme (docs/ux.md §11): (AppsUseLightTheme, high contrast) from Windows.
         self._theme_probe = theme_probe or (lambda: (None, False))
         self.apps_light, self.high_contrast = self._theme_probe()
@@ -187,6 +189,8 @@ class AppController:
             self.refresh_devices()
             if not self.can_start:
                 return
+        if self.previewing:
+            self.previewer.cancel()  # close the preview's device before the engine opens it
         self.status.clear_warning("W1")  # comes back from the engine if still missing
         self.status.clear_error("E2", "E3", "E4", "E5")
         self.status.on_start_requested(self.selected_device)
@@ -287,6 +291,42 @@ class AppController:
 
     def set_instrument_set(self, name: str) -> None:
         self._update(instrument_set=name)
+        self._changed()
+
+    # -- instrument preview -------------------------------------------------------------
+
+    @property
+    def preview_program(self) -> int:
+        """The set's first program: its curated lead instrument (curation.json order)."""
+        return INSTRUMENT_SETS[self.settings.instrument_set].programs[0]
+
+    @property
+    def previewing(self) -> bool:
+        return self.previewer is not None and self.previewer.active
+
+    @property
+    def can_preview(self) -> bool:
+        busy = self.status.playing or self.status.connecting or self.previewing
+        return self.previewer is not None and self.can_start and not busy
+
+    def preview_tooltip(self) -> str:
+        if self.status.playing or self.status.connecting:
+            return strings.PREVIEW_TOOLTIP_PLAYING
+        return strings.PREVIEW_TOOLTIP.format(name=program_name(self.preview_program))
+
+    def preview(self) -> None:
+        """Preview button: a short scale on the set's first instrument, off the UI thread.
+        Never while playing; Start cancels a running preview (they'd share the device)."""
+        if not self.can_preview:
+            return
+        self.status.clear_error("E2", "E3", "E4", "E5")
+        device = self.selected_device or self.settings.midi_device
+        self.previewer.start(device, self.settings.volume, self.preview_program)
+        self._changed()
+
+    def on_preview_done(self, error: Exception | None) -> None:
+        if error is not None:
+            self._on_error(error)
         self._changed()
 
     def set_volume(self, volume: float) -> None:
@@ -436,6 +476,8 @@ class AppController:
             return
         self.quitting = True
         try:
+            if self.previewing:
+                self.previewer.cancel()
             self.engine.shutdown()
         finally:
             self.saver.flush()
@@ -457,6 +499,8 @@ class AppController:
             self.request_theme_refresh()
         elif kind == "hotkey":
             self.on_hotkey(value)
+        elif kind == "preview_done":
+            self.on_preview_done(value)
         elif kind == "save_error":
             self.on_save_error()
         elif kind in (eng.SUSPEND, eng.RESUME, eng.DISPLAY_CHANGED):

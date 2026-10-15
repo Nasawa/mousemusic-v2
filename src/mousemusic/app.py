@@ -24,6 +24,7 @@ from mousemusic.midi import MidiOut, default_backend
 from mousemusic.midi.fake import FakeMidiOut
 from mousemusic.platform import win_theme
 from mousemusic.platform.single_instance import SingleInstance
+from mousemusic.preview import Previewer
 from mousemusic.ui import strings
 from mousemusic.ui.controller import AppController
 
@@ -199,6 +200,8 @@ def _run_app(opts: Options, instance: Any) -> int:
         hotkey_ok=hotkey_active is not None, hotkey_active=hotkey_active,
         hotkey_registrar=message_window.reregister if message_window else None,
         first_run=not loaded.existed, theme_probe=win_theme.probe,
+        previewer=Previewer(lambda: make_backend(settings, opts.dry_run),
+                            lambda error: post(("preview_done", error))),
     )  # fmt: skip
     window = MainWindow(
         root, controller, ui_queue=ui_queue, tray=tray, version=__version__,
