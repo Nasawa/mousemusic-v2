@@ -94,6 +94,8 @@ jobs:
       - name: Smoke test built exe (--self-test exit code + output reaches the shell)
         shell: pwsh
         run: |
+          # No comtypes cache from earlier runs: the bundled UIA wrapper must be enough.
+          Remove-Item -Recurse -Force "$env:TEMP\comtypes_cache" -ErrorAction SilentlyContinue
           $p = Start-Process -FilePath dist\MouseMusic.exe -ArgumentList "--self-test" -Wait -PassThru -NoNewWindow
           if ($p.ExitCode -ne 0) { throw "MouseMusic.exe --self-test exited $($p.ExitCode)" }
           # Piped: the windowed exe must write to the inherited handle (platform/console.py).
@@ -103,6 +105,7 @@ jobs:
           foreach ($want in @("PASS bundle", "PASS settings", "PASS mapping", "PASS midi", "PASS taskbar")) {
             if (-not $out.Contains($want)) { throw "missing '$want' in --self-test output" }
           }
+          if (-not $out.Contains("source=uia")) { throw "frozen exe did not read the taskbar via UI Automation" }
           $ver = (& dist\MouseMusic.exe --version | Out-String)
           if (-not $ver.Contains("mousemusic ")) { throw "missing --version output: '$ver'" }
           Write-Host "MouseMusic.exe --self-test OK (output visible)"

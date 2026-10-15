@@ -13,11 +13,22 @@ VERSION_INFO = ROOT / "packaging" / "version_info.txt"
 ICON = ROOT / "assets" / "icon.ico"
 MANIFEST = ROOT / "packaging" / "mousemusic.manifest"  # DPI awareness (PerMonitorV2)
 
+HIDDEN = []
+if sys.platform == "win32":
+    HIDDEN.append("pystray._win32")
+    # CG-S2: generate the UI Automation wrapper at build time and bundle it, so the exe
+    # doesn't depend on comtypes writing generated code to %TEMP% on first run.
+    import comtypes.client
+    from PyInstaller.utils.hooks import collect_submodules
+
+    comtypes.client.GetModule("UIAutomationCore.dll")
+    HIDDEN += collect_submodules("comtypes.gen")
+
 a = Analysis(
     [str(ROOT / "src" / "mousemusic" / "__main__.py")],
     pathex=[str(ROOT / "src")],
     datas=[(str(ROOT / "data"), "data"), (str(ROOT / "assets"), "assets")],
-    hiddenimports=["pystray._win32"] if sys.platform == "win32" else [],
+    hiddenimports=HIDDEN,
     excludes=["pytest", "_pytest", "coverage"],
     noarchive=False,
 )
