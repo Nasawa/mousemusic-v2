@@ -465,3 +465,17 @@ binding. Where one overlaps an earlier section, this section wins.
 | # | Decision |
 |---|---|
 | CG | **Proposed** in [docs/design/cell-granularity.md](docs/design/cell-granularity.md): an optional taskbar zone (`taskbar_mode`, default off). One cell per real taskbar/tray icon rectangle read with UI Automation (`taskbar_slot_source: auto`; fixed 48 DIP × DPI slots as the fallback), on every taskbar on any number of monitors, with its own instrument (`taskbar_program`). It wraps octaves past `taskbar_high_note`. The desktop mapping is unchanged. Targets left-aligned icons on a bottom taskbar (Windows 11 can't dock left). Covers all monitors' taskbars (`taskbar_monitors: all`, each one anchored and DPI-scaled separately, told apart by instrument) and the tray (right-anchored). Pitch bend rejected. A fixed desktop `cell_width_dip` is phase 2. |
+
+### Taskbar follow-ups (CG-G2 notes, listen check #26, Q-T2/Q-T3, D-1 – D-3)
+
+| # | Decision |
+|---|---|
+| CG-G2 | Per `docs/taskbar-uia-notes.md` (desk research; hardware dump still pending), `taskbar_slot_dip` default becomes **44** (Windows 11 default button width). `taskbar_tray_slot_dip` stays **32**. These only matter for the fixed fallback, since UIA reads the real rects. |
+| D-1 | `taskbar_slot_source` is case-insensitive, handled exactly like `theme` (B-1): strip and lowercase, then validate against `auto`/`uia`/`fixed`. Anything else, or a non-string, → `auto` + W3. |
+| D-2 | After an Explorer restart, `UIA_E_ELEMENTNOTAVAILABLE` triggers an immediate fresh lookup (new taskbar HWNDs and elements) and doesn't count toward the two-failure fallback. A failure of that fresh lookup counts as one failure. |
+| D-3 | A Windhawk two-row tray is ordered column by column from the right edge, top row first (right column top = tray slot 0, right column bottom = 1, …). Notes descend from `taskbar_high_note` in that order. |
+| Q-T3 | `taskbar_program` → **13 Xylophone**. `taskbar_secondary_programs` → **[8 Celesta, 108 Kalimba, 9 Glockenspiel]**. Checked: none of 13/8/108/9 is in Classic (0, 4, 11, 12, 24, 45, 46, 105), and none repeats. Sources: #26 listen check. |
+| Q-T2 | No taskbar found: no status-line message. The Taskbar notes tooltip shows `(no taskbar found)` while the zone is inactive, and the transition is logged at info. |
+| Sound | Classic is unchanged and **Banjo (105) stays**. Christopher said the sounds are fine; what bothered him was the manual checks. |
+| Checks | **Manual checklist priority is painless checks:** each audio check should be one click, via Sprite's B-5 preview/audition button, and the RC checklist has **no kill-the-task steps** (stuck-note and kill cases stay automated). Grace trims `docs/rc-manual-checklist.md` accordingly once B-5 lands. |
+
