@@ -44,7 +44,7 @@ that's ~40 slots at 100 %, and Christopher's pinned set is probably 8–20.
 **D (taskbar zone), with B as its overflow rule. A is phase 2 behind a file-only key, default off.**
 
 - On the taskbar, each icon slot (~48 DIP × monitor scale) is one column. The column's note steps up the selected scale
-  from `taskbar_low_note`, and the zone uses its own single instrument (`taskbar_program`, default Marimba 12: short,
+  from `taskbar_low_note`, and the zone uses its own single instrument (`taskbar_program`, default Xylophone 13 per #26/Q-T3: short,
   woody, distinct from the Classic rows). So every icon has a stable, distinct note with a clear "taskbar" timbre.
 - The rest of the desktop keeps today's mapping exactly, so nothing users have learned changes.
 - Defaults: 20 slots of pentatonic major from C3 = C3…C7, comfortably inside GS's good range. Wrapping (B) only starts
@@ -57,14 +57,14 @@ that's ~40 slots at 100 %, and Christopher's pinned set is probably 8–20.
 | Key | Type / range | Default | UI | Meaning |
 |---|---|---|---|---|
 | `taskbar_mode` | bool | `false` | **Yes** (checkbox) | Turns on the taskbar zone |
-| `taskbar_slot_dip` | int 24–128 | `48` | file-only | **Fallback** icon pitch in DIP, used when `taskbar_slot_source` is `fixed` or UI Automation fails (96-DPI px). Physical width = `round(slot_dip × monitor_dpi / 96)` |
+| `taskbar_slot_dip` | int 24–128 | `44` (CG-G2: Windows 11 default button width) | file-only | **Fallback** icon pitch in DIP, used when `taskbar_slot_source` is `fixed` or UI Automation fails (96-DPI px). Physical width = `round(slot_dip × monitor_dpi / 96)` |
 | `taskbar_offset_dip` | int 0–400 | `0` | file-only | Distance from the taskbar's left (or top) edge to the first slot. Covers a Start or widgets button the user wants to skip |
 | `taskbar_low_note` | int 0–127 | `48` (C3) | file-only | Note of slot 0. Later slots step up the **current scale and key** |
 | `taskbar_high_note` | int 0–127, ≥ low + 12 (OQ-8 rule) | `96` (C7) | file-only | Past this, wrap to `taskbar_low_note` (B) and play at `velocity × 0.7` so the wrap is audible |
-| `taskbar_program` | int 0–127, not a drum kit | `12` (Marimba) | file-only | Instrument for the whole zone. Y is ignored inside the zone |
+| `taskbar_program` | int 0–127, not a drum kit | `13` (Xylophone; not in Classic) | file-only | Instrument for the whole zone. Y is ignored inside the zone |
 | `taskbar_monitors` | enum `primary` \| `all` | `all` | file-only | Which taskbars count. `all` means **every taskbar on any number of monitors (N ≥ 1)**, fully supported in phase 1 (Q1) |
-| `taskbar_slot_source` | enum `auto` \| `uia` \| `fixed` | `auto` | file-only | Where slot rects come from (§4.2a). `auto` = UI Automation, falling back to fixed widths per taskbar when it fails. `uia` = UI Automation only (a failed scan → zone inactive for that taskbar). `fixed` = `taskbar_slot_dip`/`taskbar_tray_slot_dip` only |
-| `taskbar_secondary_programs` | list of 1–8 ints 0–127, not drum kits | `[13, 108, 9]` (Xylophone, Kalimba, Glockenspiel) | file-only | Instruments for **non-primary** taskbars: the k-th secondary taskbar (in the order of §4.2a) uses entry `(k-1) mod len`, so the same slot on each monitor sounds different (Q1, N monitors) |
+| `taskbar_slot_source` | enum `auto` \| `uia` \| `fixed`, case-insensitive (D-1) | `auto` | file-only | Where slot rects come from (§4.2a). `auto` = UI Automation, falling back to fixed widths per taskbar when it fails. `uia` = UI Automation only (a failed scan → zone inactive for that taskbar). `fixed` = `taskbar_slot_dip`/`taskbar_tray_slot_dip` only |
+| `taskbar_secondary_programs` | list of 1–8 ints 0–127, not drum kits | `[8, 108, 9]` (Celesta, Kalimba, Glockenspiel; none in Classic or equal to `taskbar_program`) | file-only | Instruments for **non-primary** taskbars: the k-th secondary taskbar (in the order of §4.2a) uses entry `(k-1) mod len`, so the same slot on each monitor sounds different (Q1, N monitors) |
 | `taskbar_tray` | bool | `true` | file-only | Notification area (tray icons and clock) is part of the zone, with its own right-anchored slots (Q2) |
 | `taskbar_tray_slot_dip` | int 16–96 | `32` (provisional, set by CG-G2) | file-only | **Fallback** tray icon pitch in DIP (same rule) |
 | `cell_width_dip` | int 0 or 16–400 | `0` (= current behaviour) | file-only, **phase 2** | A: fixed desktop column width, with B wrapping |
@@ -95,8 +95,9 @@ Invalid values → that key's default + W3. No `schema` bump (older builds ignor
 - **Refresh:** on start, on `WM_DISPLAYCHANGE`, on `WM_SETTINGCHANGE` (taskbar moves and DPI changes broadcast it, and
   the message window already handles it per #22), and every 2 s with the existing metrics refresh. Taskbar geometry is
   read on the engine thread and is pure data afterwards.
-- **Failure** (no taskbar, an Explorer restart, an API error): the zone is inactive and the desktop mapping applies. Log
-  at debug. No user message.
+- **Failure** (no taskbar, an Explorer restart, an API error): the zone is inactive and the desktop mapping applies.
+  No status-line message. The Taskbar notes tooltip gains `(no taskbar found)` while the zone is inactive, and it's
+  logged at info once per transition (Q-T2).
 - **Pure core:** `mapping.TaskbarZone(rect, axis, slot_px, offset_px)` plus `taskbar_cell(x, y, zone, grid)` contain
   no Win32 calls, so they're testable on Linux.
 
@@ -123,6 +124,10 @@ follow mods like that, so **the real rectangles are the primary source** and fix
   `taskbar_low_note`. Tray slots are numbered right→left and descend from `taskbar_high_note` (§4.3 step 3a is
   unchanged). Gaps between rects (padding, an empty middle) are silent cells. The 2 px hysteresis applies at each rect
   edge. Nothing else in §4.3 changes.
+- **Two-row tray (D-3):** with a Windhawk mod that stacks tray icons in two rows, tray slots are ordered **column by
+  column from the right edge, top row first**: slot 0 = right-most column top, slot 1 = right-most column bottom,
+  slot 2 = next column top, and so on. Columns are grouped by overlapping X ranges, rows by Y within the column. A
+  column with only one icon contributes one slot. Each icon rect is still its own cell.
 - **N monitors:** every taskbar found is scanned. Ordering for instruments and status text: the primary is 1, then the
   secondaries sorted by their monitor's `(left, top)`. That's stable across restarts as long as the monitor layout is.
 - **Threading and cost cap:** UIA calls go cross-process into Explorer and can block, so they **never run on the engine
@@ -133,7 +138,10 @@ follow mods like that, so **the real rectangles are the primary source** and fix
     `TaskbarCreated` message (Explorer restart), all from the existing message window.
   - **Budget:** target < 30 ms per full scan. If a scan takes > **150 ms**, the interval doubles (up to 30 s) and
     recovers after 3 fast scans. A scan has a **1 s** hard timeout. On a timeout or COM error, the previous snapshot
-    stays in use, and after 2 failures in a row that taskbar falls back as below. Measured cost goes in the debug log
+    stays in use, and after 2 failures in a row that taskbar falls back as below. **Exception (D-2):** a
+    `UIA_E_ELEMENTNOTAVAILABLE` error (stale elements after an Explorer restart) triggers an **immediate** fresh lookup
+    of the taskbar windows and elements, and **doesn't count** toward the two-failure fallback. Only if that fresh
+    lookup also fails does it count as one failure. Measured cost goes in the debug log
     and in LT-06 (CPU < 2 % still applies).
 - **Fallback (`auto`):** per taskbar, if UIA fails (COM error, timeout, zero matching elements, or an Explorer
   replacement like StartAllBack/ExplorerPatcher with no XAML peers), use the **fixed** slots from §4.2
@@ -167,8 +175,8 @@ follow mods like that, so **the real rectangles are the primary source** and fix
    others → `taskbar_secondary_programs`; the tray uses its taskbar's program) before the note-on. Leaving restores
    the row's program before the next note (the same rule as a row change, §5). Instrument rows (Y) are ignored inside the
    zone.
-6. Status line inside the zone: `E4 · Taskbar 7 · Marimba`, `E4 · Taskbar 2/7 · Xylophone` on a secondary, and
-   `C7 · Tray 1 · Marimba` (slot numbers 1-based for humans; `2/` = monitor 2).
+6. Status line inside the zone: `E4 · Taskbar 7 · Xylophone`, `E4 · Taskbar 2/7 · Celesta` on a secondary, and
+   `C7 · Tray 1 · Xylophone` (slot numbers 1-based for humans; `2/` = monitor 2).
 
 **Centered alignment:** nothing changes in the code. Slots stay at fixed positions from the taskbar's left edge, so
 the mapping is still deterministic. Only the icon → app association moves. Documented in the README, not detected.
@@ -182,7 +190,7 @@ Everything else is file-only (README documents the keys). Tray menu: unchanged.
 ### 4.5 Tests
 
 - **Pure (CI):**
-  - Slot index at 100/125/150/200 % (48/60/72/96 px)
+  - Slot index at 100/125/150/200 % (44/55/66/88 px)
   - offset region → silent
   - exact boundaries
   - wrap with velocity scaling
