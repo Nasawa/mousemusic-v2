@@ -331,10 +331,10 @@ Common setup: `taskbar_mode: true`, `--dry-run --log-level debug` (logs the slot
 ### Slot source (`taskbar_slot_source`)
 | ID | Case | Steps | Expected | Type |
 |---|---|---|---|---|
-| TB-01 | Validation | `auto`, `uia`, `fixed`, `"UIA"`, `"x"`, `1`, missing | Valid values kept. Default `auto`. Invalid → `auto` + W3 (§CG-4.1). Case handling unspecified, see D-1 | A |
+| TB-01 | Validation (case-insensitive) | `auto`, `uia`, `fixed`, `"UIA"`, `" Fixed "`, `"x"`, `1`, missing | Stripped and lowercased, like `theme`: `"UIA"` → `uia`, `" Fixed "` → `fixed`, no W3. Default `auto`. Anything else or a non-string → `auto` + W3 (§11 D-1) | A |
 | TB-02 | `auto`, stock taskbar | Stock Win11, left alignment, 10 pinned icons, 100 % | One cell per visible app button **and** per tray item (one per `Taskbar.TaskListButtonAutomationPeer`, plus Start/Search/Task View, plus each `SystemTray.*` button). Log says source = uia (§CG-4.2a) | M + A (snapshot) |
 | TB-03 | `uia` only, success | Same as TB-02 with `uia` | Same cells as TB-02 | M |
-| TB-04 | `fixed` | Set `fixed` | Slot width = `round(taskbar_slot_dip × dpi/96)` from the bar's left edge + offset. Tray from `TrayNotifyWnd` with `taskbar_tray_slot_dip`. Reader never called (fake asserts no call) (§CG-4.2a) | A + M |
+| TB-04 | `fixed` | Set `fixed` (default `taskbar_slot_dip` **44**, `taskbar_tray_slot_dip` **32**, §11) | Slot width = `round(taskbar_slot_dip × dpi/96)` from the bar's left edge + offset. Tray from `TrayNotifyWnd` with `taskbar_tray_slot_dip`. Reader never called (fake asserts no call) (§CG-4.2a) | A + M |
 | TB-05 | Snapshot → cells | Recorded rect lists: stock, ~20 custom-size icons + 8 tray + clock, mixed widths, gaps, empty | One cell per rect. App notes ascend from `taskbar_low_note`, tray notes descend from `taskbar_high_note`. Gaps silent. 2 px hysteresis at each rect edge (§CG-4.2a, 4.3) | A |
 | TB-06 | Non-matching or off-bar elements | Snapshot with zero-size rects, `IsOffscreen` items, rects outside the taskbar rect, overflow-flyout items | Ignored. Only visible rects inside the bar become slots (§CG-4.2a) | A |
 
@@ -345,7 +345,8 @@ Common setup: `taskbar_mode: true`, `--dry-run --log-level debug` (logs the slot
 | TB-11 | Empty result | Fake reader returns 0 matches | Same as TB-10 (zero matches counts as failure) | A |
 | TB-12 | Timeout | Fake reader blocks > 1 s | Scan abandoned at 1 s. Engine never blocked (runs on the `taskbar-scan` thread). Previous snapshot used | A |
 | TB-13 | Slow scans → backoff | Fake reader takes 200 ms | Interval doubles up to 30 s. Recovers after 3 fast scans (< 150 ms) | A |
-| TB-14 | Stale rects after Explorer restart | Fake: after `TaskbarCreated`, old element refs return `UIA_E_ELEMENTNOTAVAILABLE` or the old rects | A rescan is triggered (debounced 250 ms) using a fresh `ElementFromHandle` on the **new** HWNDs. Stale rects never kept for more than one rescan. See D-2 | A |
+| TB-14 | Stale elements after Explorer restart | Fake: after `TaskbarCreated`, the old element refs raise `UIA_E_ELEMENTNOTAVAILABLE` | An **immediate** fresh lookup (`ElementFromHandle` on the new HWNDs). This does **not** count toward the two-failure fallback, so the source stays `uia` and is never shown as `fixed` because of a restart. A second, real failure of the fresh lookup counts normally (§11 D-2) | A |
+| TB-14a | Repeated not-available | Fake: not-available on every lookup for 10 scans | No tight loop: at most one immediate retry per scan. Backoff (TB-13) still applies. See E-1 | A |
 | TB-15 | Explorer restart, real | Playing on the taskbar: Task Manager → Windows Explorer → Restart | No crash, no stuck note. Zone inactive (desktop mapping) while Explorer is down. Back within ~1 s of the taskbar reappearing (`TaskbarCreated`), with the same notes per icon (§CG-4.2, 4.2a) | M |
 | TB-16 | Explorer replacement | If available: ExplorerPatcher Win10 taskbar or StartAllBack | `auto` → fixed slots (no XAML peers). No error. `uia` → zone inactive | M (optional) |
 | TB-17 | Kill Explorer mid-play | `taskkill /f /im explorer.exe`, wait 5 s, `start explorer` | As TB-15. Nothing logged above info | M |
@@ -354,9 +355,11 @@ Common setup: `taskbar_mode: true`, `--dry-run --log-level debug` (logs the slot
 ### Icon size: custom and Windhawk
 | ID | Case | Steps | Expected | Type |
 |---|---|---|---|---|
-| TB-20 | Windhawk icon size | Windhawk "Taskbar height and icon size" mod: button width 44 → 32 and 60, icon 24 → 16 and 32 | `auto`: exactly one cell per visible icon at every size. `fixed` at the default 48 shows the misalignment (that's why UIA is the default) | M |
-| TB-21 | Windhawk tray spacing | "Taskbar tray icon spacing and grid" mod: tray width 32 → 24 and 18. Also 2 rows | One cell per tray icon in 1 row. 2-row grid: record behaviour, see D-3 | M |
-| TB-22 | Christopher's setup | **Pending (TB-P1)**: his Windhawk mods with ~20 left-aligned icons and ~8 tray icons plus the clock | Every icon and tray icon gets its own cell (`--self-test` slot dump). Recorded once the setup is confirmed | M (pending) |
+| TB-20 | Slots follow button width, not icon size | Windhawk `taskbar-icon-size`: icon 24 → 32 with button width kept at 44 | `auto`: slot rects are the 44-DIP **button** rects (× scale), unchanged from stock, not 32-DIP icon boxes. `fixed` (44) still lines up | M + A (snapshot) |
+| TB-20a | Custom button width | Same mod, button width 60 (and 32) | `auto`: one cell per icon, each about 60 (or 32) DIP × scale. `fixed` at 44 visibly misaligned, which documents why `auto`/UIA is the default | M + A (snapshot) |
+| TB-21 | Windhawk tray spacing | `taskbar-notification-icon-spacing`: tray width 32 → 24 and 18 | One cell per tray icon | M |
+| TB-21a | Two-row tray order | Same mod with 2 rows. Snapshot test with a 2×4 grid of tray rects | Ordered **column by column from the right edge, top row first**: tray slot 0 (status `Tray 1`) = right column top, 1 = right column bottom, 2 = top of the next column left, and so on. Notes descend in that order (§11 D-3) | A + M |
+| TB-22 | TB-P1: Christopher's setup (test data only, never defaults) | Windhawk `taskbar-icon-size` v1.3.10 (m417z): height 48, **icon 32** (stock 24), **button width 44**, small icon 16, small button 32. About 20 left-aligned icons, about 8 tray icons + clock. Run `--self-test` and hover each icon | `source=uia`. App slots ≈ 44 DIP × scale each (button width), **not** 32 (icon size). One cell per visible icon and tray icon, clock included. These values aren't used for any default (§11 keeps 44/32 from CG-G2) | M |
 | TB-23 | Small taskbar buttons | Registry/small-button variant where available (24H2 removed `TaskbarSi`; use the Windhawk mod) | Same as TB-20 | M |
 
 ### Monitors, scaling and placement
@@ -379,10 +382,46 @@ Common setup: `taskbar_mode: true`, `--dry-run --log-level debug` (logs the slot
 | TB-44 | Add/remove a tray icon | Start or quit an app with a tray icon | Only slots **left** of it shift. The clock and the right-most icons keep their notes | M + A |
 | TB-45 | Overflow flyout | Open "Show hidden icons" | Flyout icons (separate overflow window) are **not** slots. The chevron itself is one slot | M |
 | TB-46 | Secondary tray | Hover the clock on a secondary taskbar | Clock is a tray slot if found (`SystemTray.OmniButton*`). Otherwise the bar has no tray part, with no error | M |
+| TB-48 | No taskbar found (Q-T2) | Fake no taskbar (or Explorer down) with Taskbar notes on | **No** status-line message. The Taskbar notes tooltip shows `(no taskbar found)` while the zone is inactive and goes back to normal when it returns. The transition is logged at info (§11 Q-T2) | A + M |
+| TB-49 | Taskbar instruments (Q-T3) | Defaults check | `taskbar_program` 13 Xylophone. `taskbar_secondary_programs` [8, 108, 9]. None is in Classic, none repeats (§11 Q-T3) | A |
 | TB-47 | Mode off | `taskbar_mode: false` | Mapping identical to desktop mapping (property test). No UIA load, no scan thread | A |
 
 ### Pending
-- **TB-P1:** confirm Christopher's Windhawk mods and versions, and record the UIA dump (Accessibility Insights) of his taskbar with them on (CG-G2 AC). Not done; he hasn't been contacted.
-- **D-1** `taskbar_slot_source` case handling: theme is case-insensitive (B-1). Same rule here?
-- **D-2** Explorer restart: the design says "deactivates until the next refresh" plus a `TaskbarCreated` rescan. Should a scan that hits `UIA_E_ELEMENTNOTAVAILABLE` force a fresh `ElementFromHandle` right away, without counting as one of the "2 failures"?
-- **D-3** Multi-row tray (Windhawk grid): the slot rule is one-dimensional (right → left). How should 2-row tray rects be ordered?
+- **TB-P1:** mod settings received (TB-22). Still to record: the `--self-test` slot dump on his machine (CG-G2 AC). Not done; he hasn't been contacted.
+D-1 – D-3 were answered in §11: D-1 → TB-01; D-2 → TB-14/14a; D-3 → TB-21a. Defaults `taskbar_slot_dip` 44 and `taskbar_tray_slot_dip` 32 are settled (§11) → TB-04.
+- **E-1** D-2 says not-available triggers an immediate fresh lookup. If Explorer keeps crashing, is there a cap on immediate retries (TB-14a assumes one per scan)?
+
+## 12. Sprite's hardware checks (#30, #32, #33)
+
+These come from the "Real-Windows checks" in each PR, mapped to existing cases. #31 (CG-S1) is pure logic and lists no hardware checks; its behaviour is covered by TB-01, TB-04, TB-05, TB-21a and TB-47.
+
+| ID | From | Check | Pass if | Maps to |
+|---|---|---|---|---|
+| HW-30.1 | #30 | 200–300 % on a small screen, force a long message (two-key W4) | Stops at the work area, taskbar not covered, `…` at the end, tooltip and log have the full text | WS-04a/04c |
+| HW-30.2 | #30 | Window near the bottom, long message, then clear it; restart | Moves up only as needed, returns to your spot, saved position = your spot | WS-05, WS-06, WS-06d |
+| HW-30.3 | #30 | While clamped, drag elsewhere, clear | Stays where dragged, and that's saved | WS-06a |
+| HW-30.4 | #30 | Narrator + NVDA: Start/Stop, unplug or busy device; Tab from ⟳ | Each new status announced once, no repeats on resize or theme. Tab reaches the status and reads the full text. Otherwise C-2 fallback | SR-02–SR-07 |
+| HW-30.5 | #30 | `"theme": " Dark "` in settings.json, launch | File now says `"dark"`, no W3 | TH-02/02b |
+| HW-32.1 | #32 | `--self-test` on stock 23H2/24H2 and on Christopher's Windhawk setup, primary and secondary | `PASS taskbar … source=uia`, one slot per visible icon, clock included | TB-02, TB-22 |
+| HW-32.2 | #32 | `--log-level debug` while playing with Taskbar notes | `taskbar scan: … in X ms` mostly < 30 ms | TB-18 |
+| HW-32.3 | #32 | Restart Explorer while running `--self-test` in a loop | No crash, zone comes back | TB-15 |
+| HW-32.4 | #32 | StartAllBack/ExplorerPatcher, if available | `source=fixed`, no crash | TB-16 |
+| HW-33.1 | #33 | Turn on Taskbar notes while playing, hover each pinned icon, then leave the bar | Distinct ascending notes in Xylophone (13), status `… · Taskbar k · Xylophone`. Leaving restores the row instrument with no wrong-instrument first note | TB-02, TB-30 |
+| HW-33.2 | #33 | Tray icons and the clock; open and close apps | `Tray 1` = clock end, notes descend, tray notes don't change | TB-42/43 |
+| HW-33.3 | #33 | Second monitor, taskbars on all displays, also 100 % + 150 % | `Taskbar 2/k · Celesta`, same slot = same pitch | TB-30 |
+| HW-33.4 | #33 | Restart Explorer mid-play | No crash, desktop mapping meanwhile, zones back within ~2 s | TB-15 |
+| HW-33.5 | #33 | Move or resize the taskbar, change alignment | Zones follow within one refresh | TB-34, TB-40 |
+| HW-33.6 | #33 | Christopher's Windhawk setup, `--log-level debug` | One cell per visible icon, scans mostly < 30 ms | TB-22, TB-18 |
+| HW-33.7 | #33 | Row 7 at Segoe UI 100/150/200 % | `Hold notes (legato)` and `Taskbar notes` both fully visible on one row at the 340 px minimum | Q-T1 below |
+
+### Q-T1: does row 7 fit in 340 px?
+
+**Yes, with about 79 logical px to spare at 100 %, and the same in logical px at 150 % and 200 %.**
+
+Method (2026-10-18, on Linux, no Windows machine):
+- **Font:** Tk 8.6's `TkDefaultFont` on Windows is the system message font, Segoe UI 9 pt = 12 px at 96 DPI (18 px at 150 %, 24 px at 200 %). Segoe UI isn't available here, so I measured with **Selawik**, Microsoft's open-source replacement for Segoe UI (https://github.com/microsoft/Selawik), using Pillow `getlength` at those pixel sizes. Its README notes it lacks Segoe UI's kerning, so real widths may be a few px narrower; there's no measurement on actual Segoe UI.
+- **Text:** `Hold notes (legato)` = 102 px, `Taskbar notes` = 73 px at 100 % (153/110 at 150 %, 204/147 at 200 %).
+- **Widget overhead:** clam `TCheckbutton` indicator + padding measured with real Tk/ttk (`winfo_reqwidth` minus the text width) = 27 px per checkbox at 100 %, 39 at 150 %, 52 at 200 %. Plus the 16 px gap (`padx=(16, 0)`, scaled) and the frame padding 8 px each side (`ttk.Frame(padding=8)`), from `ui/window.py`.
+- **Total:** 100 % → 261 of 340 px (margin 79). 150 % → 389 of 510 (margin 121 physical, 81 logical). 200 % → 519 of 680 (margin 161 physical, 81 logical).
+- **Assumption:** row 7 spans both grid columns (`columnspan=2, sticky="e"`), so the whole 340 − 16 frame padding is available. If Windows scaled the font but not the 16 px gap and padding, the margin would only get bigger.
+- Confirm on hardware with HW-33.7.
