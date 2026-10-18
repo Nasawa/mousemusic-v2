@@ -358,7 +358,7 @@ Common setup: `taskbar_mode: true`, `--dry-run --log-level debug` (logs the slot
 | TB-20 | Slots follow button width, not icon size | Windhawk `taskbar-icon-size`: icon 24 → 32 with button width kept at 44 | `auto`: slot rects are the 44-DIP **button** rects (× scale), unchanged from stock, not 32-DIP icon boxes. `fixed` (44) still lines up | M + A (snapshot) |
 | TB-20a | Custom button width | Same mod, button width 60 (and 32) | `auto`: one cell per icon, each about 60 (or 32) DIP × scale. `fixed` at 44 visibly misaligned, which documents why `auto`/UIA is the default | M + A (snapshot) |
 | TB-21 | Windhawk tray spacing | `taskbar-notification-icon-spacing`: tray width 32 → 24 and 18 | One cell per tray icon | M |
-| TB-21a | Two-row tray order | Same mod with 2 rows. Snapshot test with a 2×4 grid of tray rects | Ordered **column by column from the right edge, top row first**: slot 1 = top-right, 2 = bottom-right, 3 = top of the next column left, and so on. Notes descend in that order (§11 D-3) | A + M |
+| TB-21a | Two-row tray order | Same mod with 2 rows. Snapshot test with a 2×4 grid of tray rects | Ordered **column by column from the right edge, top row first**: tray slot 0 (status `Tray 1`) = right column top, 1 = right column bottom, 2 = top of the next column left, and so on. Notes descend in that order (§11 D-3) | A + M |
 | TB-22 | TB-P1: Christopher's setup (test data only, never defaults) | Windhawk `taskbar-icon-size` v1.3.10 (m417z): height 48, **icon 32** (stock 24), **button width 44**, small icon 16, small button 32. About 20 left-aligned icons, about 8 tray icons + clock. Run `--self-test` and hover each icon | `source=uia`. App slots ≈ 44 DIP × scale each (button width), **not** 32 (icon size). One cell per visible icon and tray icon, clock included. These values aren't used for any default (§11 keeps 44/32 from CG-G2) | M |
 | TB-23 | Small taskbar buttons | Registry/small-button variant where available (24H2 removed `TaskbarSi`; use the Windhawk mod) | Same as TB-20 | M |
 
@@ -382,6 +382,8 @@ Common setup: `taskbar_mode: true`, `--dry-run --log-level debug` (logs the slot
 | TB-44 | Add/remove a tray icon | Start or quit an app with a tray icon | Only slots **left** of it shift. The clock and the right-most icons keep their notes | M + A |
 | TB-45 | Overflow flyout | Open "Show hidden icons" | Flyout icons (separate overflow window) are **not** slots. The chevron itself is one slot | M |
 | TB-46 | Secondary tray | Hover the clock on a secondary taskbar | Clock is a tray slot if found (`SystemTray.OmniButton*`). Otherwise the bar has no tray part, with no error | M |
+| TB-48 | No taskbar found (Q-T2) | Fake no taskbar (or Explorer down) with Taskbar notes on | **No** status-line message. The Taskbar notes tooltip shows `(no taskbar found)` while the zone is inactive and goes back to normal when it returns. The transition is logged at info (§11 Q-T2) | A + M |
+| TB-49 | Taskbar instruments (Q-T3) | Defaults check | `taskbar_program` 13 Xylophone. `taskbar_secondary_programs` [8, 108, 9]. None is in Classic, none repeats (§11 Q-T3) | A |
 | TB-47 | Mode off | `taskbar_mode: false` | Mapping identical to desktop mapping (property test). No UIA load, no scan thread | A |
 
 ### Pending
