@@ -346,7 +346,7 @@ Common setup: `taskbar_mode: true`, `--dry-run --log-level debug` (logs the slot
 | TB-12 | Timeout | Fake reader blocks > 1 s | Scan abandoned at 1 s. Engine never blocked (runs on the `taskbar-scan` thread). Previous snapshot used | A |
 | TB-13 | Slow scans → backoff | Fake reader takes 200 ms | Interval doubles up to 30 s. Recovers after 3 fast scans (< 150 ms) | A |
 | TB-14 | Stale elements after Explorer restart | Fake: after `TaskbarCreated`, the old element refs raise `UIA_E_ELEMENTNOTAVAILABLE` | An **immediate** fresh lookup (`ElementFromHandle` on the new HWNDs). This does **not** count toward the two-failure fallback, so the source stays `uia` and is never shown as `fixed` because of a restart. A second, real failure of the fresh lookup counts normally (§11 D-2) | A |
-| TB-14a | Repeated not-available | Fake: not-available on every lookup for 10 scans | No tight loop: at most one immediate retry per scan. Backoff (TB-13) still applies. See E-1 | A |
+| TB-14a | Repeated not-available | Fake: not-available on every lookup for 10 scans | No tight loop: at most **one** immediate fresh lookup per scan. If it also fails, it counts as one failure toward the two-failure fallback (TB-10) and the interval doubling (TB-13) (§11 E-1) | A |
 | TB-15 | Explorer restart, real | Playing on the taskbar: Task Manager → Windows Explorer → Restart | No crash, no stuck note. Zone inactive (desktop mapping) while Explorer is down. Back within ~1 s of the taskbar reappearing (`TaskbarCreated`), with the same notes per icon (§CG-4.2, 4.2a) | M |
 | TB-16 | Explorer replacement | If available: ExplorerPatcher Win10 taskbar or StartAllBack | `auto` → fixed slots (no XAML peers). No error. `uia` → zone inactive | M (optional) |
 | TB-17 | Kill Explorer mid-play | `taskkill /f /im explorer.exe`, wait 5 s, `start explorer` | As TB-15. Nothing logged above info | M |
@@ -389,7 +389,7 @@ Common setup: `taskbar_mode: true`, `--dry-run --log-level debug` (logs the slot
 ### Pending
 - **TB-P1:** mod settings received (TB-22). Still to record: the `--self-test` slot dump on his machine (CG-G2 AC). Not done; he hasn't been contacted.
 D-1 – D-3 were answered in §11: D-1 → TB-01; D-2 → TB-14/14a; D-3 → TB-21a. Defaults `taskbar_slot_dip` 44 and `taskbar_tray_slot_dip` 32 are settled (§11) → TB-04.
-- **E-1** D-2 says not-available triggers an immediate fresh lookup. If Explorer keeps crashing, is there a cap on immediate retries (TB-14a assumes one per scan)?
+E-1 was answered in §11 (600e808): one immediate fresh lookup per scan, then normal failure counting and backoff → TB-14a.
 
 ## 12. Sprite's hardware checks (#30, #32, #33)
 
