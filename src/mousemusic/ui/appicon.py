@@ -29,13 +29,14 @@ def asset_candidates() -> list[Path]:
         out.append(Path(meipass) / "assets")
     if getattr(sys, "frozen", False):
         out.append(Path(sys.executable).resolve().parent / "assets")
-    out.append(Path(__file__).resolve().parents[1] / "assets")  # packaged inside mousemusic/
-    out.append(Path(__file__).resolve().parents[3] / "assets")  # source checkout: repo root
+    # Package data (src/mousemusic/assets/): the same path from a source checkout, an editable
+    # install and a regular `pip install`, so it must come last (find_assets_dir's fallback).
+    out.append(Path(__file__).resolve().parents[1] / "assets")
     return out
 
 
 def find_assets_dir(candidates: Sequence[Path] | None = None) -> Path:
-    """First candidate that contains ``icon.ico``; else the last one (repo-root layout)."""
+    """First candidate that contains ``icon.ico``; else the last one (the package's own)."""
     cands = list(candidates) if candidates is not None else asset_candidates()
     for c in cands:
         if (c / "icon.ico").is_file():

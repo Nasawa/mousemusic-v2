@@ -47,7 +47,7 @@ class Options:
 
 
 def assets_dir() -> Path:
-    """``assets/`` next to the bundled app (PyInstaller ``_MEIPASS``) or at the repo root."""
+    """``assets/`` in the PyInstaller bundle (``_MEIPASS``) or inside the installed package."""
     from mousemusic.ui.appicon import find_assets_dir
 
     return find_assets_dir()

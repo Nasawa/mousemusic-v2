@@ -36,7 +36,7 @@ Design principles:
   other value → `system` + W3.
 - Rows (Q-D1, §12): the Taskbar notes checkbox shares row 7 with Hold notes (no extra row), and the Theme row (8d) is already counted in the 360 minimum (ARCHITECTURE §11 Q-D1).
 - Position: saved in `window_x`/`window_y` (logical px, `null` = centre on primary). On load, if the saved point isn't on any monitor's work area, centre the window and don't overwrite the saved values until the user moves it (§11 UX-Q1).
-- Icon: `assets/icon.ico` (P2).
+- Icon: `src/mousemusic/assets/icon.ico` (P2).
 - Layout: ttk `grid`, two columns (label right-aligned, control left-aligned), 8 px padding, 4 px row gap.
 
 ### 1.1 Wireframe
@@ -101,7 +101,7 @@ Format while playing: `<dot> <Note> · <Instrument> · <Device>`, where the devi
 | Warning (still works) | amber `▲` | warning text from §4 |
 | Error (can't play) | red `■` | error text from §4 |
 
-Tray icon per state (P2, `assets/icons/`): Stopped → `tray-idle.ico`, Playing → `tray-playing.ico`, Error → `tray-error.ico`. Warnings keep the idle or playing icon.
+Tray icon per state (P2, `src/mousemusic/assets/icons/`): Stopped → `tray-idle.ico`, Playing → `tray-playing.ico`, Error → `tray-error.ico`. Warnings keep the idle or playing icon.
 
 - Note names use sharps for display (`C♯4`) unless the key is a flat key (`F`, `B♭`, `E♭`, `A♭`), in which case flats are used. Octave numbering: middle C = `C4` (MIDI 60).
 - Instrument names come from `instruments.py` (title case, e.g. `Nylon Guitar`).
@@ -121,7 +121,7 @@ Tray icon per state (P2, `assets/icons/`): Stopped → `tray-idle.ico`, Playing 
 ## 2. Tray icon
 
 ### 2.1 Icon & tooltip
-- Icon: `assets/icon.ico`. Two variants (P2 delivers both): **idle** (normal) and **playing** (with a small green dot
+- Icon: `src/mousemusic/assets/icon.ico`. Two variants (P2 delivers both): **idle** (normal) and **playing** (with a small green dot
   or note badge), so state shows at a glance. Until P2 lands, Sprite uses one icon.
 - Tooltip (hover), exact:
   - Stopped: `MouseMusic vX.Y.Z — Stopped · Ctrl+Alt+M`

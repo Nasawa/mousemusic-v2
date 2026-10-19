@@ -64,6 +64,12 @@ jobs:
       - name: --self-test smoke (no GUI)
         run: python -m mousemusic --self-test
 
+      - name: Wheel ships runtime assets (clean venv install, headless lookup)
+        shell: bash
+        run: |
+          python -m pip wheel --no-deps -w wheelhouse .
+          python tools/check_wheel_assets.py wheelhouse/mousemusic-*.whl
+
   build-exe:
     # §7: build the exe on every PR/push and keep it 7 days so Grace can test PRs.
     name: build exe (windows-latest)

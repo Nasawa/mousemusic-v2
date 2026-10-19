@@ -41,7 +41,7 @@ def test_missing_assets_falls_back_without_raising(tmp_path):
 def test_pyinstaller_spec_bundles_assets_and_exe_icon():
     src = (ROOT / "mousemusic.spec").read_text()
     tree = ast.parse(src)
-    assert 'ICON = ROOT / "assets" / "icon.ico"' in src
+    assert 'ICON = PKG / "assets" / "icon.ico"' in src
     assert "icon=str(ICON)" in src
     datas = [kw.value for n in ast.walk(tree) if isinstance(n, ast.Call)
              for kw in n.keywords if kw.arg == "datas"]  # fmt: skip

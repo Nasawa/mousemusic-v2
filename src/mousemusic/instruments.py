@@ -155,9 +155,10 @@ def parse_curation(data: Any) -> tuple[dict[str, InstrumentSet], str]:
 
 
 def curation_path() -> Path:
-    """``data/curation.json`` in the PyInstaller bundle or the source checkout."""
+    """``data/curation.json`` in the PyInstaller bundle, else the package's own copy
+    (``src/mousemusic/data/``: same path from source, editable and regular installs)."""
     bundle = getattr(sys, "_MEIPASS", None)
-    root = Path(bundle) if bundle else Path(__file__).resolve().parents[2]
+    root = Path(bundle) if bundle else Path(__file__).resolve().parent
     return root / "data" / "curation.json"
 
 
