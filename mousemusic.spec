@@ -10,7 +10,8 @@ from pathlib import Path
 ROOT = Path(SPECPATH)
 ONEDIR = os.environ.get("MM_ONEDIR") == "1"
 VERSION_INFO = ROOT / "packaging" / "version_info.txt"
-ICON = ROOT / "assets" / "icon.ico"
+PKG = ROOT / "src" / "mousemusic"
+ICON = PKG / "assets" / "icon.ico"
 MANIFEST = ROOT / "packaging" / "mousemusic.manifest"  # DPI awareness (PerMonitorV2)
 
 HIDDEN = []
@@ -27,7 +28,9 @@ if sys.platform == "win32":
 a = Analysis(
     [str(ROOT / "src" / "mousemusic" / "__main__.py")],
     pathex=[str(ROOT / "src")],
-    datas=[(str(ROOT / "data"), "data"), (str(ROOT / "assets"), "assets")],
+    # Package data lives in src/mousemusic/ (so `pip install` ships it); the bundle keeps it at
+    # _MEIPASS/data and _MEIPASS/assets, where curation_path() and asset_candidates() look first.
+    datas=[(str(PKG / "data"), "data"), (str(PKG / "assets"), "assets")],
     hiddenimports=HIDDEN,
     excludes=["pytest", "_pytest", "coverage"],
     noarchive=False,

@@ -1,6 +1,6 @@
 # Instrument & scale curation (P3)
 
-Data: [`data/curation.json`](../data/curation.json). Set and scale ids match `ARCHITECTURE.md` §4/§5, so S2's
+Data: [`src/mousemusic/data/curation.json`](../src/mousemusic/data/curation.json). Set and scale ids match `ARCHITECTURE.md` §4/§5, so S2's
 `instruments.py` and `scales.py` can mirror it directly. GM program numbers are 0-based.
 
 ## Selection rules

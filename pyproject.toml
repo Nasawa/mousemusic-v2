@@ -19,6 +19,13 @@ version = { attr = "mousemusic.__version__" }
 
 [tool.setuptools.packages.find]
 where = ["src"]
+namespaces = false  # assets/ and data/ are package data, not (namespace) packages
+
+[tool.setuptools.package-data]
+# Runtime files the app opens by path (icons, curation data). Without this, `pip install .`
+# ships only .py files and an installed copy falls back to Tk's icon and built-in sets.
+# tests/test_packaging.py checks this covers every file under them.
+mousemusic = ["assets/**/*", "data/*.json"]
 
 [tool.ruff]
 line-length = 100

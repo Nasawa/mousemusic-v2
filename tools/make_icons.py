@@ -1,8 +1,8 @@
 """Regenerate MouseMusic icons from SVG sources.
 
 Usage:  pip install cairosvg Pillow   then   python tools/make_icons.py
-Writes assets/icons/*.svg (sources), assets/icons/png/*.png, assets/icon.ico,
-assets/icons/tray-*.ico and assets/icons/preview.png.
+Writes src/mousemusic/assets/: icons/*.svg (sources), icons/png/*.png, icon.ico,
+icons/tray-*.ico and icons/preview.png.
 """
 
 from io import BytesIO
@@ -12,7 +12,8 @@ import cairosvg
 from PIL import Image, ImageDraw
 
 ROOT = Path(__file__).resolve().parents[1]
-OUT = ROOT / "assets" / "icons"
+ASSETS = ROOT / "src" / "mousemusic" / "assets"
+OUT = ASSETS / "icons"
 PNG = OUT / "png"
 SIZES = [16, 20, 24, 32, 40, 48, 64, 256]
 BG = "#4F46E5"  # indigo: contrasts with both light (#F3F3F3) and dark (#202020) taskbars
@@ -70,7 +71,7 @@ def main() -> None:
             im.save(PNG / f"{name}-{s}.png")
             frames.append(im)
         imgs[name] = frames
-        target = ROOT / "assets" / "icon.ico" if name == "app" else OUT / f"{name}.ico"
+        target = ASSETS / "icon.ico" if name == "app" else OUT / f"{name}.ico"
         frames[-1].save(
             target,
             format="ICO",
